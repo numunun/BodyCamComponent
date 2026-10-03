@@ -33,9 +33,9 @@ public final class BodyCamCamera {
     private static final double DOWN = 0.30;     // 눈높이에서 내릴 거리
     private static final double FORWARD = 0.20;  // 몸 앞쪽으로 뺄 거리
     private static final float HAND_RAISE = 0.12f;  // 손/총을 올릴 높이
-    private static final float HAND_TILT = -6f;  // 손/총 기울기 (도), 팔 쪽이 올라감
+    private static final float HAND_TILT = 0f;  // 손/총 기울기 (도), 팔 쪽이 올라감
     private static final float HAND_X = -0.10f;   // 좌우 이동 (음수 = 왼쪽, 화면 중앙 쪽)
-    private static final float HAND_YAW = 5f;     // 총구 방향 회전 (도)
+    private static final float HAND_YAW = 0f;     // 총구 방향 회전 (도)
     private static final boolean CAMERA_TO_EYE_WHEN_AIMING = true;  // 정조준 시 카메라를 눈 위치로
     private static final float CAMERA_AIM_SEC = 0.3f;  // 정조준 시 카메라 이동 시간
 
