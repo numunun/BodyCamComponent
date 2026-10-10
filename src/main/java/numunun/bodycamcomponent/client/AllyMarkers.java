@@ -21,6 +21,7 @@ import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.network.AbilityClientData;
 import numunun.bodycamcomponent.downed.DownedManager;
+import numunun.bodycamcomponent.util.Safe;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
@@ -55,6 +56,10 @@ public final class AllyMarkers {
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent e) {
         if (e.phase != TickEvent.Phase.END) return;
+        Safe.run("아군 시야 판정", AllyMarkers::updateVisible);
+    }
+
+    private static void updateVisible() {
         visible.clear();
 
         Minecraft mc = Minecraft.getInstance();

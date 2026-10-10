@@ -10,6 +10,8 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.PacketDistributor;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.OsdPacket;
+import numunun.bodycamcomponent.util.MatchLog;
+import numunun.bodycamcomponent.util.Safe;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,6 +51,7 @@ final class PauseManager {
         GameManager.sendOsd(OsdPacket.PAUSE, reason, 0);
         GameManager.broadcast(server, Component.literal("[일시 정지] " + reason).withStyle(ChatFormatting.YELLOW));
         sendResumeButton(server);
+        MatchLog.event("일시 정지: " + reason);
         return true;
     }
 
@@ -57,6 +60,7 @@ final class PauseManager {
         startPhase = false;
         resumeTicks = RESUME_TICKS;
         GameManager.sendOsd(OsdPacket.PLAY, "", RESUME_TICKS / 20);
+        MatchLog.event("재개 카운트다운");
         return true;
     }
 
@@ -81,6 +85,7 @@ final class PauseManager {
     }
 
     private static void finishResume(MinecraftServer server) {
+        MatchLog.event(startPhase ? "교전 시작" : "재개");
         paused = false;
         frozenPos.clear();
         // 일시정지 중 들어온 사람: 직급 배정, 스폰, 시작 연출
@@ -88,7 +93,7 @@ final class PauseManager {
             ServerPlayer p = server.getPlayerList().getPlayer(id);
             if (p != null && GameManager.isParticipant(p) && !RespawnManager.isWaiting(id)) {
                 RoleManager.ensureRole(p);
-                GameManager.spawnParticipant(p);
+                Safe.run("합류 스폰: " + p.getScoreboardName(), () -> GameManager.spawnParticipant(p));
                 ReportManager.sendIntro(p, 0);
             }
         }

@@ -24,6 +24,9 @@ import numunun.bodycamcomponent.config.BodyCamConfig;
 import numunun.bodycamcomponent.game.GameManager;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.DownedSyncPacket;
+import numunun.bodycamcomponent.util.BodyCamLog;
+import numunun.bodycamcomponent.util.MatchLog;
+import numunun.bodycamcomponent.util.Safe;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -72,8 +75,13 @@ public final class DownedManager {
         if (states.containsKey(p.getUUID())) return;  // 이미 빈사: 피해 그대로 (확인 사살 가능)
         if (e.getAmount() < p.getHealth()) return;
         if (!canGoDown(p, e.getSource())) return;
-        e.setCanceled(true);
-        goDown(p);
+        try {
+            goDown(p);
+            e.setCanceled(true);
+        } catch (Exception ex) {
+            states.remove(p.getUUID());
+            BodyCamLog.error("빈사 전환", ex);
+        }
     }
 
     private static boolean canGoDown(ServerPlayer p, DamageSource source) {
@@ -92,6 +100,7 @@ public final class DownedManager {
         p.setSprinting(false);
         p.setForcedPose(Pose.SWIMMING);
         sync(p.server);
+        MatchLog.event("쓰러짐: " + p.getScoreboardName());
     }
 
     // 쓰러진 직후 잠깐 무적
@@ -107,6 +116,10 @@ public final class DownedManager {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent e) {
         if (e.phase != TickEvent.Phase.END || states.isEmpty()) return;
+        Safe.run("빈사 진행", DownedManager::tickDowned);
+    }
+
+    private static void tickDowned() {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null || GameManager.isPaused()) return;
 
@@ -130,6 +143,7 @@ public final class DownedManager {
                     states.remove(p.getUUID());
                     changed = true;
                     p.kill();
+                    MatchLog.event("포기: " + p.getScoreboardName());
                     continue;
                 }
             } else {
@@ -156,6 +170,7 @@ public final class DownedManager {
                     states.remove(p.getUUID());
                     changed = true;
                     p.kill();
+                    MatchLog.event("출혈사: " + p.getScoreboardName());
                     continue;
                 }
             }
@@ -207,6 +222,7 @@ public final class DownedManager {
     private static void revive(ServerPlayer p, ServerPlayer helper) {
         states.remove(p.getUUID());
         GameManager.recordRevive(helper);
+        MatchLog.event("구조: " + helper.getScoreboardName() + " → " + p.getScoreboardName());
         p.setForcedPose(null);
         p.setPose(Pose.STANDING);
         p.setHealth(BodyCamConfig.REVIVE_HEALTH.get());

@@ -21,6 +21,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 import numunun.bodycamcomponent.config.BodyCamConfig;
+import numunun.bodycamcomponent.util.BodyCamLog;
+import numunun.bodycamcomponent.util.Safe;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -36,7 +38,18 @@ public final class LoadoutManager {
 
     private static boolean enabled = false;
 
+    // 지급 후보 총 목록 (경기 시작마다 새로 만듦)
+    private static List<Map.Entry<ResourceLocation, CommonGunIndex>> primaryPool;
+    private static List<Map.Entry<ResourceLocation, CommonGunIndex>> secondaryPool;
+
     private LoadoutManager() {}
+
+    // 경기 시작 시 호출: 총기 목록과 부착물 호환 목록을 새로 만들게 함
+    public static void clearCaches() {
+        primaryPool = null;
+        secondaryPool = null;
+        LoadoutAttachments.clearCache();
+    }
 
     public static boolean isEnabled() { return enabled; }
 
@@ -153,6 +166,18 @@ public final class LoadoutManager {
 
     // ── 랜덤 지급 (지급한 총 목록 반환) ──
     public static List<ItemStack> giveRandomLoadout(ServerPlayer p) {
+        if (primaryPool == null || secondaryPool == null) buildGunPools();
+
+        List<ItemStack> guns = new ArrayList<>();
+        ItemStack primary = giveFromPool(p, primaryPool, 0);
+        if (!primary.isEmpty()) guns.add(primary);
+        ItemStack secondary = giveFromPool(p, secondaryPool, 1);
+        if (!secondary.isEmpty()) guns.add(secondary);
+        Safe.run("투척물 지급", () -> giveThrowables(p));
+        return guns;
+    }
+
+    private static void buildGunPools() {
         List<Map.Entry<ResourceLocation, CommonGunIndex>> primaries = new ArrayList<>();
         List<Map.Entry<ResourceLocation, CommonGunIndex>> secondaries = new ArrayList<>();
         List<? extends String> blacklist = BodyCamConfig.GUN_BLACKLIST.get();
@@ -165,13 +190,26 @@ public final class LoadoutManager {
             if (primaryTypes.contains(type)) primaries.add(entry);
             else if (secondaryTypes.contains(type)) secondaries.add(entry);
         }
+        primaryPool = primaries;
+        secondaryPool = secondaries;
+        BodyCamLog.info("지급 후보 총기: 주무기 " + primaries.size() + "정, 보조무기 " + secondaries.size() + "정");
+        if (primaries.isEmpty()) BodyCamLog.warnOnce("no-primary", "주무기 후보가 없습니다. primaryTypes, gunBlacklist 설정을 확인하세요.");
+        if (secondaries.isEmpty()) BodyCamLog.warnOnce("no-secondary", "보조무기 후보가 없습니다. secondaryTypes 설정을 확인하세요.");
+    }
 
-        List<ItemStack> guns = new ArrayList<>();
+    // 고른 총의 데이터가 잘못돼 있으면 다른 총으로 최대 3번 다시 시도
+    private static ItemStack giveFromPool(ServerPlayer p, List<Map.Entry<ResourceLocation, CommonGunIndex>> pool, int slot) {
+        if (pool.isEmpty()) return ItemStack.EMPTY;
         RandomSource r = p.getRandom();
-        if (!primaries.isEmpty()) guns.add(giveGun(p, primaries.get(r.nextInt(primaries.size())), 0));
-        if (!secondaries.isEmpty()) guns.add(giveGun(p, secondaries.get(r.nextInt(secondaries.size())), 1));
-        giveThrowables(p);
-        return guns;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            Map.Entry<ResourceLocation, CommonGunIndex> entry = pool.get(r.nextInt(pool.size()));
+            try {
+                return giveGun(p, entry, slot);
+            } catch (Exception e) {
+                BodyCamLog.error("총 지급: " + entry.getKey(), e);
+            }
+        }
+        return ItemStack.EMPTY;
     }
 
     private static ItemStack giveGun(ServerPlayer p, Map.Entry<ResourceLocation, CommonGunIndex> entry, int slot) {
@@ -188,7 +226,9 @@ public final class LoadoutManager {
                 .setAmmoCount(data.getAmmoAmount())
                 .build();
 
-        if (BodyCamConfig.RANDOM_ATTACHMENTS.get()) LoadoutAttachments.randomize(gun, data, p.getRandom());
+        if (BodyCamConfig.RANDOM_ATTACHMENTS.get()) {
+            Safe.run("랜덤 부착물: " + id, () -> LoadoutAttachments.randomize(gun, data, p.getRandom()));
+        }
 
         Inventory inv = p.getInventory();
         if (inv.getItem(slot).isEmpty()) inv.setItem(slot, gun);
@@ -204,8 +244,10 @@ public final class LoadoutManager {
     private static void giveThrowables(ServerPlayer p) {
         List<Item> pool = new ArrayList<>();
         for (String id : BodyCamConfig.THROWABLE_POOL.get()) {
-            Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(id));
+            ResourceLocation key = ResourceLocation.tryParse(id);
+            Item item = key == null ? null : ForgeRegistries.ITEMS.getValue(key);
             if (item != null && item != Items.AIR) pool.add(item);
+            else BodyCamLog.warnOnce("throwable:" + id, "투척물 아이템을 찾을 수 없습니다: " + id + " (모드가 없거나 ID 오타)");
         }
         if (pool.isEmpty()) return;
 
@@ -237,7 +279,10 @@ public final class LoadoutManager {
                 }
                 ResourceLocation id = ResourceLocation.tryParse(s);
                 Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
-                if (item == null || item == Items.AIR) continue;  // 없는 모드 아이템은 건너뜀
+                if (item == null || item == Items.AIR) {  // 없는 모드 아이템은 건너뜀
+                    BodyCamLog.warnOnce("kit:" + s, "직급 장비 아이템을 찾을 수 없습니다: " + s + " (모드가 없거나 ID 오타)");
+                    continue;
+                }
 
                 int max = new ItemStack(item).getMaxStackSize();
                 while (count > 0) {

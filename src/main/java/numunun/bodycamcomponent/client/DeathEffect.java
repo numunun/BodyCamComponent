@@ -69,9 +69,12 @@ public final class DeathEffect {
 
     public static void render(ForgeGui gui, GuiGraphics g, float partialTick, int w, int h) {
         g.pose().pushPose();
-        g.pose().translate(0, 0, 600);  // 채팅 등 다른 HUD보다 앞에 그리기
-        draw(g, w, h);
-        g.pose().popPose();
+        try {
+            g.pose().translate(0, 0, 600);  // 채팅 등 다른 HUD보다 앞에 그리기
+            draw(g, w, h);
+        } finally {
+            g.pose().popPose();
+        }
     }
 
     private static void draw(GuiGraphics g, int w, int h) {

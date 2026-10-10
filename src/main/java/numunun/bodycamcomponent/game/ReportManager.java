@@ -10,6 +10,7 @@ import net.minecraftforge.network.PacketDistributor;
 import numunun.bodycamcomponent.config.BodyCamConfig;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.IntroPacket;
+import numunun.bodycamcomponent.util.MatchLog;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -38,6 +39,10 @@ final class ReportManager {
         startedAtMs = System.currentTimeMillis();
         Random rnd = new Random();
         codename = CODE_A[rnd.nextInt(CODE_A.length)] + " " + CODE_B[rnd.nextInt(CODE_B.length)] + " 작전";
+    }
+
+    static String codename() {
+        return codename;
     }
 
     // ── 시작 연출 ──
@@ -163,5 +168,6 @@ final class ReportManager {
 
     private static void send(MinecraftServer server, Component msg) {
         GameManager.broadcast(server, msg);
+        MatchLog.event(msg.getString());
     }
 }

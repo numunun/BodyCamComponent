@@ -21,6 +21,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.downed.DownedManager;
+import numunun.bodycamcomponent.util.BodyCamLog;
 import org.joml.Matrix4f;
 
 @Mod.EventBusSubscriber(modid = BodyCamComponent.MODID, value = Dist.CLIENT)
@@ -35,6 +36,7 @@ public final class LowHealthEffect {
     private static float saturation = 1f;
     private static long lastNanos = 0L;
     private static boolean wasDead = false;
+    private static boolean broken = false;  // 쉐이더 오류가 나면 이번 실행 동안 효과를 끔
 
     private static float targetSaturation(LocalPlayer p) {
         if (p.isCreative() || p.isSpectator()) return 1f;
@@ -65,8 +67,17 @@ public final class LowHealthEffect {
         float target = p == null ? 1f : targetSaturation(p);
         saturation += (target - saturation) * Math.min(1f, dt * LERP_SPEED);
 
-        if (saturation > 0.995f || shader == null) return;
-        apply(e.getGuiGraphics(), e.getWindow());
+        if (saturation > 0.995f || shader == null || broken) return;
+        try {
+            apply(e.getGuiGraphics(), e.getWindow());
+        } catch (Exception ex) {
+            broken = true;  // 매 프레임 오류가 나지 않게 효과를 끔
+            BodyCamLog.error("저체력 흑백 효과 (이번 실행 동안 꺼짐)", ex);
+            Minecraft.getInstance().getMainRenderTarget().bindWrite(true);  // 화면 출력 대상 원상 복구
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.enableDepthTest();
+        }
     }
 
     private static void apply(GuiGraphics g, Window win) {

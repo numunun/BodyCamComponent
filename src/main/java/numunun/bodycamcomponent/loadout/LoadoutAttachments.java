@@ -17,6 +17,7 @@ import numunun.bodycamcomponent.config.BodyCamConfig;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,12 +32,36 @@ final class LoadoutAttachments {
 
     private LoadoutAttachments() {}
 
+    // 총마다 장착 가능한 부착물 목록 (같은 총은 다시 계산하지 않음, 경기 시작마다 초기화)
+    private record Compat(Map<AttachmentType, List<ResourceLocation>> byType, List<ResourceLocation> mags) {}
+
+    private static final Map<ResourceLocation, Compat> compatCache = new HashMap<>();
+
+    static void clearCache() {
+        compatCache.clear();
+    }
+
     // ── 랜덤 부착물 ──
     static void randomize(ItemStack gun, GunData data, RandomSource r) {
         if (!(gun.getItem() instanceof IGun iGun) || iGun.hasAttachmentLock(gun)) return;
-        List<? extends String> blacklist = BodyCamConfig.ATTACHMENT_BLACKLIST.get();
+        Compat compat = compatCache.computeIfAbsent(iGun.getGunId(gun), id -> buildCompat(iGun, gun));
 
-        // 이 총에 달 수 있는 부착물을 슬롯별로 모으기
+        // 슬롯마다 확률적으로 비우거나 랜덤 장착
+        for (AttachmentType type : RANDOM_SLOTS) {
+            List<ResourceLocation> list = compat.byType().get(type);
+            if (list == null || list.isEmpty()) continue;
+            if (r.nextFloat() < emptyChance(type)) continue;
+            install(iGun, gun, list.get(r.nextInt(list.size())));
+        }
+        if (!compat.mags().isEmpty()) install(iGun, gun, compat.mags().get(r.nextInt(compat.mags().size())));
+
+        // 확장 탄창 용량까지 꽉 채우기
+        iGun.setCurrentAmmoCount(gun, AttachmentDataUtils.getAmmoCountWithAttachment(gun, data));
+    }
+
+    // 이 총에 달 수 있는 부착물을 슬롯별로 모으기
+    private static Compat buildCompat(IGun iGun, ItemStack gun) {
+        List<? extends String> blacklist = BodyCamConfig.ATTACHMENT_BLACKLIST.get();
         Map<AttachmentType, List<ResourceLocation>> byType = new EnumMap<>(AttachmentType.class);
         List<ResourceLocation> mags = new ArrayList<>();
         for (Map.Entry<ResourceLocation, CommonAttachmentIndex> e : TimelessAPI.getAllCommonAttachmentIndex()) {
@@ -53,18 +78,7 @@ final class LoadoutAttachments {
                 byType.computeIfAbsent(type, k -> new ArrayList<>()).add(e.getKey());
             }
         }
-
-        // 슬롯마다 확률적으로 비우거나 랜덤 장착
-        for (AttachmentType type : RANDOM_SLOTS) {
-            List<ResourceLocation> list = byType.get(type);
-            if (list == null || list.isEmpty()) continue;
-            if (r.nextFloat() < emptyChance(type)) continue;
-            install(iGun, gun, list.get(r.nextInt(list.size())));
-        }
-        if (!mags.isEmpty()) install(iGun, gun, mags.get(r.nextInt(mags.size())));
-
-        // 확장 탄창 용량까지 꽉 채우기
-        iGun.setCurrentAmmoCount(gun, AttachmentDataUtils.getAmmoCountWithAttachment(gun, data));
+        return new Compat(byType, mags);
     }
 
     private static void install(IGun iGun, ItemStack gun, ResourceLocation id) {

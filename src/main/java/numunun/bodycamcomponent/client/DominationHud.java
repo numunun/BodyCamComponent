@@ -8,18 +8,36 @@ import net.minecraftforge.client.gui.overlay.ForgeGui;
 import numunun.bodycamcomponent.network.DominationClientData;
 import numunun.bodycamcomponent.network.DominationSyncPacket;
 
+import java.util.HashMap;
+import java.util.Map;
+
 // 점령전 줄다리기 바: 왼쪽 팀 색 ↔ 오른쪽 팀 색
 public final class DominationHud {
     private static final int BAR_W = 100;
     private static final int BAR_H = 5;
     private static final int ROW_H = 12;
+    private static final float SMOOTH = 8f;  // 클수록 새 값을 빨리 따라감
+
+    // 거점별로 화면에 그리고 있는 값 (서버 값을 향해 부드럽게 따라감)
+    private static final Map<String, Float> shown = new HashMap<>();
+    private static long lastNanos = 0L;
 
     private DominationHud() {}
 
     public static void render(ForgeGui gui, GuiGraphics g, float partialTick, int w, int h) {
         Minecraft mc = Minecraft.getInstance();
         DominationSyncPacket d = DominationClientData.current;
-        if (mc.options.hideGui || d.points().isEmpty()) return;
+        if (d.points().isEmpty()) {
+            shown.clear();  // 경기가 끝나면 다음 경기는 처음부터
+            return;
+        }
+
+        long now = System.nanoTime();
+        float dt = lastNanos == 0L ? 0f : Math.min((now - lastNanos) / 1_000_000_000f, 0.1f);
+        lastNanos = now;
+        float k = Math.min(1f, dt * SMOOTH);
+
+        if (mc.options.hideGui) return;
 
         Font font = mc.font;
         int leftColor = 0xFF000000 | teamRgb(mc, d.leftTeam(), 0x5555FF);
@@ -29,7 +47,10 @@ public final class DominationHud {
         int x = w / 2 - BAR_W / 2;
         int y = 8;
         for (DominationSyncPacket.Point p : d.points()) {
-            int split = x + Math.round(BAR_W * p.leftShare());
+            Float cur = shown.get(p.name());
+            float value = cur == null ? p.leftShare() : cur + (p.leftShare() - cur) * k;
+            shown.put(p.name(), value);
+            int split = x + Math.round(BAR_W * value);
 
             g.drawString(font, p.name(), x - 6 - font.width(p.name()), y - 1, 0xFFFFFFFF, true);
             int border = p.contested() && blink ? 0xFFFFFF55 : 0xAA000000;

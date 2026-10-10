@@ -19,6 +19,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.downed.DownedManager;
+import numunun.bodycamcomponent.util.BodyCamLog;
 
 import java.util.HashMap;
 import java.util.List;
@@ -47,20 +48,25 @@ public final class DownedRenderer {
 
         PoseStack ps = e.getPoseStack();
         ps.pushPose();
-        ps.mulPose(Axis.YP.rotationDegrees(180f - bodyYaw));
-        ps.translate(0, 0.13, 0.85);                 // 바닥에 안 묻히게 + 판정 상자 가운데로
-        ps.mulPose(Axis.XP.rotationDegrees(-90f));    // 엎드리기
-        ps.scale(-1f, -1f, 1f);
-        ps.scale(0.9375f, 0.9375f, 0.9375f);          // 바닐라 플레이어 크기
-        ps.translate(0, -1.501, 0);
+        try {
+            ps.mulPose(Axis.YP.rotationDegrees(180f - bodyYaw));
+            ps.translate(0, 0.13, 0.85);                 // 바닥에 안 묻히게 + 판정 상자 가운데로
+            ps.mulPose(Axis.XP.rotationDegrees(-90f));    // 엎드리기
+            ps.scale(-1f, -1f, 1f);
+            ps.scale(0.9375f, 0.9375f, 0.9375f);          // 바닐라 플레이어 크기
+            ps.translate(0, -1.501, 0);
 
-        int light = e.getPackedLight();
-        int overlay = LivingEntityRenderer.getOverlayCoords(ap, 0f);  // 맞으면 빨갛게
-        model.renderToBuffer(ps, e.getMultiBufferSource().getBuffer(model.renderType(ap.getSkinTextureLocation())),
-                light, overlay, 1f, 1f, 1f, 1f);
+            int light = e.getPackedLight();
+            int overlay = LivingEntityRenderer.getOverlayCoords(ap, 0f);  // 맞으면 빨갛게
+            model.renderToBuffer(ps, e.getMultiBufferSource().getBuffer(model.renderType(ap.getSkinTextureLocation())),
+                    light, overlay, 1f, 1f, 1f, 1f);
 
-        armorLayer(renderer).render(ps, e.getMultiBufferSource(), light, ap, 0f, 0f, pt, ap.tickCount + pt, 0f, 0f);
-        ps.popPose();
+            armorLayer(renderer).render(ps, e.getMultiBufferSource(), light, ap, 0f, 0f, pt, ap.tickCount + pt, 0f, 0f);
+        } catch (Exception ex) {
+            BodyCamLog.error("쓰러진 플레이어 그리기", ex);
+        } finally {
+            ps.popPose();
+        }
     }
 
     private static void poseModel(PlayerModel<AbstractClientPlayer> m, Player p, float pt, float bodyYaw) {

@@ -11,6 +11,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
 import numunun.bodycamcomponent.loadout.LoadoutManager;
+import numunun.bodycamcomponent.util.Safe;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -75,7 +76,7 @@ final class RespawnManager {
     private static void finishWaiting(ServerPlayer p, GameType prev) {
         p.setCamera(p);
         if (p.isSpectator()) p.setGameMode(prev);
-        GameManager.respawnParticipant(p);
+        Safe.run("리스폰 지급: " + p.getScoreboardName(), () -> GameManager.respawnParticipant(p));
     }
 
     // 접속을 끊으면 원래 게임 모드로 (경기 중이 아니어도 실행)

@@ -19,6 +19,7 @@ import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.PingRequestPacket;
+import numunun.bodycamcomponent.util.Safe;
 import org.lwjgl.glfw.GLFW;
 
 // 핑 키 (기본: 마우스 휠 클릭)
@@ -32,7 +33,7 @@ public final class PingKey {
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent e) {
         if (e.phase != TickEvent.Phase.END) return;
-        while (KEY.consumeClick()) sendPing();
+        while (KEY.consumeClick()) Safe.run("핑 보내기", PingKey::sendPing);
     }
 
     private static void sendPing() {

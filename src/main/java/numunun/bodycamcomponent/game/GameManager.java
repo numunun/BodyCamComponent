@@ -1,5 +1,6 @@
 package numunun.bodycamcomponent.game;
 
+import com.tacz.guns.api.item.IGun;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -19,6 +20,8 @@ import numunun.bodycamcomponent.loadout.LoadoutManager;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.OsdPacket;
 import numunun.bodycamcomponent.registry.ModEntities;
+import numunun.bodycamcomponent.util.MatchLog;
+import numunun.bodycamcomponent.util.Safe;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -81,6 +84,12 @@ public final class GameManager {
         if (!isParticipant(victim)) return;
         ScoreManager.recordDeath(victim);
         RespawnManager.recordDeath(victim, killer);
+        if (killer == null || killer == victim) {
+            MatchLog.event("사망: " + victim.getScoreboardName() + " (" + source.getMsgId() + ")");
+        } else {
+            MatchLog.event("사살: " + killer.getScoreboardName() + " → " + victim.getScoreboardName()
+                    + (mode.isTeamMode() && sameTeam(killer, victim) ? " (아군)" : ""));
+        }
         ScoreManager.onKill(victim, killer);
     }
 
@@ -154,8 +163,11 @@ public final class GameManager {
         RoleManager.reset();
         RespawnManager.reset(BodyCamConfig.RESPAWN_DELAY.get() * 20);
         ReportManager.begin();
+        LoadoutManager.clearCaches();  // 건팩이 바뀌었을 수 있으니 경기마다 총기 목록 새로 만들기
         running = true;
         LoadoutManager.setEnabled(true);
+        MatchLog.begin(ReportManager.codename());
+        MatchLog.event("작전 개시: " + ReportManager.codename() + " / " + mode.label + " / 목표 " + target);
 
         // 사망 화면 건너뛰기
         GameRules.BooleanValue rule = server.getGameRules().getRule(GameRules.RULE_DO_IMMEDIATE_RESPAWN);
@@ -172,7 +184,7 @@ public final class GameManager {
         if (mode == GameMode.DOM) DominationManager.start(server);
         RoleManager.assign(server);
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (isParticipant(p)) spawnParticipant(p);
+            if (isParticipant(p)) Safe.run("스폰: " + p.getScoreboardName(), () -> spawnParticipant(p));
         }
         broadcast(server, Component.literal("[작전 개시] " + mode.label).withStyle(ChatFormatting.GRAY));
 
@@ -194,10 +206,33 @@ public final class GameManager {
     // ── 경기 중단, 종료 ──
     public static boolean stop(MinecraftServer server) {
         if (!running) return false;
+        MatchLog.event("작전 중단 (명령어)");
         reset(server);
         sendOsd(OsdPacket.STOP, "작전 중단", 0);
         broadcast(server, Component.literal("[작전 중단]").withStyle(ChatFormatting.GRAY));
+        MatchLog.end();
         return true;
+    }
+
+    // 서버가 꺼질 때
+    public static void shutdown(MinecraftServer server) {
+        if (running) MatchLog.event("서버 종료로 작전 중단");
+        reset(server);
+        MatchLog.end();
+    }
+
+    // 경기 진행 중 오류가 계속되면 안전하게 중단 (상태가 꼬인 채 계속되는 것 방지)
+    public static void abortOnError(MinecraftServer server) {
+        if (!running) return;
+        MatchLog.event("오류가 반복되어 작전 강제 중단");
+        Safe.run("오류 후 경기 정리", () -> reset(server));
+        running = false;  // 정리 중 오류가 나도 경기는 확실히 끝냄
+        Safe.run("오류 알림", () -> {
+            sendOsd(OsdPacket.STOP, "오류로 중단", 0);
+            broadcast(server, Component.literal("[오류] 경기 진행 중 문제가 생겨 작전을 중단했습니다. 서버 로그를 확인하세요.")
+                    .withStyle(ChatFormatting.RED));
+        });
+        MatchLog.end();
     }
 
     // 디버그: 경기를 바로 끝내고 작전 보고서까지 출력
@@ -214,7 +249,9 @@ public final class GameManager {
         reset(server);
         sendOsd(OsdPacket.STOP, result.getString(), 0);
         broadcast(server, Component.literal("[작전 종료] ").withStyle(ChatFormatting.GRAY).append(result));
+        MatchLog.event("작전 종료: " + result.getString());
         ReportManager.announce(server, result);
+        MatchLog.end();
     }
 
     // 경기 상태 정리 (점수, 직급 기록은 작전 보고서를 위해 다음 경기 시작 전까지 유지)
@@ -265,6 +302,7 @@ public final class GameManager {
         heal(p);
         teleportToSpawn(p);
         RoleManager.sendAbility(p);
+        MatchLog.event("배치: " + describe(p) + " ← " + describeGuns(guns));
     }
 
     // 리스폰 대기가 끝났을 때: 보관품을 돌려받고 스폰
@@ -275,6 +313,7 @@ public final class GameManager {
         RoleManager.applyLeaderHealth(p);
         heal(p);
         teleportToSpawn(p);
+        MatchLog.event("리스폰: " + p.getScoreboardName() + " ← " + describeGuns(guns));
     }
 
     private static void heal(ServerPlayer p) {
@@ -321,6 +360,32 @@ public final class GameManager {
 
     static void sendOsd(int kind, String sub, int seconds) {
         BodyCamNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new OsdPacket(kind, sub, seconds));
+    }
+
+    private static boolean sameTeam(ServerPlayer a, ServerPlayer b) {
+        Team ta = a.getTeam();
+        Team tb = b.getTeam();
+        return ta != null && tb != null && ta.getName().equals(tb.getName());
+    }
+
+    // 경기 기록용: "Dev [케스트렐] 팀장"
+    private static String describe(ServerPlayer p) {
+        Team t = p.getTeam();
+        String role = RoleManager.roleOf(p);
+        return p.getScoreboardName()
+                + (t != null ? " [" + teamDisplay(p.server, t.getName()) + "]" : "")
+                + (role != null ? " " + role : "");
+    }
+
+    // 경기 기록용: 지급한 총 ID 목록
+    private static String describeGuns(List<ItemStack> guns) {
+        StringBuilder sb = new StringBuilder();
+        for (ItemStack s : guns) {
+            if (!(s.getItem() instanceof IGun g)) continue;
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(g.getGunId(s));
+        }
+        return sb.length() == 0 ? "총 없음" : sb.toString();
     }
 
     // 팀 표시 이름 (내부 이름 blue → 화면 이름 케스트렐)

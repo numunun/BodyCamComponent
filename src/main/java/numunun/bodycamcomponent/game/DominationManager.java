@@ -14,6 +14,7 @@ import net.minecraftforge.network.PacketDistributor;
 import numunun.bodycamcomponent.downed.DownedManager;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.DominationSyncPacket;
+import numunun.bodycamcomponent.util.MatchLog;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -77,10 +78,8 @@ final class DominationManager {
         GameSettings s = GameSettings.get(server);
         for (GameSettings.CapturePoint pt : s.points) tickPoint(server, pt);
         if (ticks % SCORE_INTERVAL == 0 && scoreTick(server)) return;  // 승리로 종료됨
-        if (ticks % 5 == 0) {
-            syncHud(s);
-            showActionBars(server, s);
-        }
+        showActionBars(server, s);           // 문구는 매 틱 (1%씩 표시)
+        if (ticks % 5 == 0) syncHud(s);      // 상단 바는 0.25초마다, 화면에서 부드럽게 보간
         if (ticks % 10 == 0) drawOutlines(server, s);
     }
 
@@ -142,6 +141,7 @@ final class DominationManager {
             st.progress = Math.min(CAPTURE_TICKS, st.progress + n);
             if (st.progress >= CAPTURE_TICKS) {
                 st.owner = team;
+                MatchLog.event("점령: 거점 " + pt.name() + " ← " + GameManager.teamDisplay(server, team));
                 GameManager.broadcast(server, Component.literal("[거점 " + pt.name() + "] ").withStyle(ChatFormatting.GOLD)
                         .append(teamLabel(server, team))
                         .append(Component.literal(" 점령").withStyle(ChatFormatting.WHITE)));
@@ -239,11 +239,11 @@ final class DominationManager {
             double y = pt.center().getY() + 1.02;
             double minX = pt.center().getX() - RADIUS, maxX = pt.center().getX() + RADIUS + 1;
             double minZ = pt.center().getZ() - RADIUS, maxZ = pt.center().getZ() + RADIUS + 1;
-            for (double x = minX; x <= maxX + 1e-6; x += 0.25) {
+            for (double x = minX; x <= maxX + 1e-6; x += 0.5) {
                 lvl.sendParticles(dust, x, y, minZ, 1, 0, 0, 0, 0);
                 lvl.sendParticles(dust, x, y, maxZ, 1, 0, 0, 0, 0);
             }
-            for (double z = minZ; z <= maxZ + 1e-6; z += 0.25) {
+            for (double z = minZ; z <= maxZ + 1e-6; z += 0.5) {
                 lvl.sendParticles(dust, minX, y, z, 1, 0, 0, 0, 0);
                 lvl.sendParticles(dust, maxX, y, z, 1, 0, 0, 0, 0);
             }
