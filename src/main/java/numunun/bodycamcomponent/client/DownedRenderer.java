@@ -18,7 +18,7 @@ import net.minecraftforge.client.event.RenderPlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
-import numunun.bodycamcomponent.compat.PlayerReviveCompat;
+import numunun.bodycamcomponent.downed.DownedManager;
 
 import java.util.HashMap;
 import java.util.List;
@@ -34,7 +34,7 @@ public final class DownedRenderer {
     @SubscribeEvent
     public static void onRenderPlayer(RenderPlayerEvent.Pre e) {
         Player p = e.getEntity();
-        if (!(p instanceof AbstractClientPlayer ap) || !PlayerReviveCompat.isBleeding(p)) return;
+        if (!(p instanceof AbstractClientPlayer ap) || !DownedManager.isDowned(p)) return;
         Minecraft mc = Minecraft.getInstance();
         if (p == mc.player && mc.options.getCameraType().isFirstPerson()) return;  // 내 몸은 건드리지 않음
 

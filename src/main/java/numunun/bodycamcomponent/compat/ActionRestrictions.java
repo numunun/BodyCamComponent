@@ -12,6 +12,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.game.GameManager;
+import numunun.bodycamcomponent.downed.DownedManager;
 
 // 빈사 상태나 일시정지 중에는 사격, 재장전, 아이템 사용 차단
 @Mod.EventBusSubscriber(modid = BodyCamComponent.MODID)
@@ -19,7 +20,7 @@ public final class ActionRestrictions {
 
     private static boolean blocked(Entity e) {
         if (!(e instanceof Player p)) return false;
-        return PlayerReviveCompat.isBleeding(p) || GameManager.isPaused();
+        return DownedManager.isDowned(p) || GameManager.isPaused();
     }
 
     @SubscribeEvent

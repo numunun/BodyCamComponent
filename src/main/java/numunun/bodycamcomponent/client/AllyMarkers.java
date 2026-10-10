@@ -8,7 +8,6 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
@@ -20,8 +19,8 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
-import numunun.bodycamcomponent.compat.PlayerReviveCompat;
 import numunun.bodycamcomponent.network.AbilityClientData;
+import numunun.bodycamcomponent.downed.DownedManager;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
@@ -125,7 +124,7 @@ public final class AllyMarkers {
             if (!onScreen) continue;
 
             int x1 = (int) rect[0], y1 = (int) rect[1], x2 = (int) rect[2], y2 = (int) rect[3];
-            boolean downed = PlayerReviveCompat.isBleeding(other);
+            boolean downed = DownedManager.isDowned(other);
             int color = downed ? 0xFFFF5555 : COLOR;  // 쓰러진 팀원은 빨간색
             g.fill(x1, y1, x2, y1 + 1, color);
             g.fill(x1, y2 - 1, x2, y2, color);

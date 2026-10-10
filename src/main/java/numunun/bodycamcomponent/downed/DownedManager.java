@@ -206,6 +206,7 @@ public final class DownedManager {
 
     private static void revive(ServerPlayer p, ServerPlayer helper) {
         states.remove(p.getUUID());
+        GameManager.recordRevive(helper);
         p.setForcedPose(null);
         p.setPose(Pose.STANDING);
         p.setHealth(BodyCamConfig.REVIVE_HEALTH.get());

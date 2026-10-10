@@ -11,7 +11,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraftforge.network.PacketDistributor;
-import numunun.bodycamcomponent.compat.PlayerReviveCompat;
+import numunun.bodycamcomponent.downed.DownedManager;
 import numunun.bodycamcomponent.network.BodyCamNetwork;
 import numunun.bodycamcomponent.network.DominationSyncPacket;
 import org.joml.Vector3f;
@@ -87,7 +87,7 @@ final class DominationManager {
     // ── 점령 판정 ──
     private static boolean canCapture(ServerPlayer p) {
         return GameManager.isParticipant(p) && !p.isSpectator() && p.isAlive()
-                && p.getTeam() != null && !PlayerReviveCompat.isBleeding(p);
+                && p.getTeam() != null && !DownedManager.isDowned(p);
     }
 
     private static boolean isOnPoint(ServerPlayer p, GameSettings.CapturePoint pt) {

@@ -16,7 +16,7 @@ import java.util.List;
 @Mod.EventBusSubscriber(modid = BodyCamComponent.MODID)
 public final class LoadoutEvents {
 
-    // LOWEST: PlayerRevive가 빈사 상태로 전환(사망 취소)한 경우엔 실행되지 않음
+    // LOWEST: 다른 모드가 사망을 취소한 경우엔 실행되지 않음 (빈사는 그 전 단계에서 처리됨)
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onDeath(LivingDeathEvent e) {
         if (!LoadoutManager.isEnabled()) return;
