@@ -12,6 +12,10 @@ import com.tacz.guns.config.sync.SyncConfig;
 import com.tacz.guns.resource.index.CommonAmmoIndex;
 import com.tacz.guns.resource.index.CommonGunIndex;
 import com.tacz.guns.resource.pojo.data.gun.GunData;
+import com.tacz.guns.api.item.builder.AttachmentItemBuilder;
+import com.tacz.guns.resource.index.CommonAttachmentIndex;
+import com.tacz.guns.util.AttachmentDataUtils;
+import java.util.EnumMap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -21,34 +25,94 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
+import numunun.bodycamcomponent.config.BodyCamConfig;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 public final class LoadoutManager {
     public static final String STASH_KEY = "bodycam_stash";
     public static final String ATTACH_KEY = "bodycam_attachments";
     public static final String AUTO_TAG = "BodyCamAuto";
+    public static final String KIT_TAG = "BodyCamKit";
 
-    // 지급 대상 총기 종류
-    private static final Set<String> PRIMARY_TYPES = Set.of("rifle", "smg", "shotgun", "sniper");
-    private static final Set<String> SECONDARY_TYPES = Set.of("pistol");
-    // 종류와 상관없이 제외할 총기
-    private static final Set<ResourceLocation> BLACKLIST = Set.of(
-            new ResourceLocation("tacz", "m134")
-    );
+    // 지급 규칙은 설정 파일 [loadout]에서 읽음. "종류=숫자" 목록에서 값 찾기
+    private static int lookup(List<? extends String> entries, String key, int fallback) {
+        for (String e : entries) {
+            int eq = e.indexOf('=');
+            if (eq > 0 && e.substring(0, eq).trim().equals(key)) {
+                try {
+                    return Integer.parseInt(e.substring(eq + 1).trim());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return fallback;
+    }
 
-    // 종류별 예비 탄창 수
-    private static final Map<String, Integer> SPARE_MAGS = Map.of(
-            "pistol", 4, "smg", 5, "rifle", 5, "sniper", 4, "shotgun", 6
-    );
-    // 종류별 최소 예비 탄약 (탄창이 작은 총 보정)
-    private static final Map<String, Integer> MIN_SPARE_AMMO = Map.of(
-            "pistol", 40, "sniper", 30, "shotgun", 60
-    );
+    // ── 랜덤 부착물 ──
+    private static final AttachmentType[] RANDOM_SLOTS = {
+            AttachmentType.SCOPE, AttachmentType.MUZZLE, AttachmentType.GRIP,
+            AttachmentType.LASER, AttachmentType.STOCK
+    };
+
+    private static void randomizeAttachments(ItemStack gun, GunData data, RandomSource r) {
+        if (!(gun.getItem() instanceof IGun iGun) || iGun.hasAttachmentLock(gun)) return;
+        List<? extends String> blacklist = BodyCamConfig.ATTACHMENT_BLACKLIST.get();
+
+        // 이 총에 달 수 있는 부착물을 슬롯별로 모으기
+        Map<AttachmentType, List<ResourceLocation>> byType = new EnumMap<>(AttachmentType.class);
+        List<ResourceLocation> mags = new ArrayList<>();
+        for (Map.Entry<ResourceLocation, CommonAttachmentIndex> e : TimelessAPI.getAllCommonAttachmentIndex()) {
+            if (blacklist.contains(e.getKey().toString())) continue;
+            ItemStack att = AttachmentItemBuilder.create().setId(e.getKey()).build();
+            if (!iGun.allowAttachment(gun, att)) continue;
+
+            AttachmentType type = e.getValue().getType();
+            if (type == AttachmentType.EXTENDED_MAG) {
+                if (e.getValue().getData() != null && e.getValue().getData().getExtendedMagLevel() == 1) {
+                    mags.add(e.getKey());  // 확장 탄창은 1단계만
+                }
+            } else {
+                byType.computeIfAbsent(type, k -> new ArrayList<>()).add(e.getKey());
+            }
+        }
+
+        // 슬롯마다 확률적으로 비우거나 랜덤 장착
+        for (AttachmentType type : RANDOM_SLOTS) {
+            List<ResourceLocation> list = byType.get(type);
+            if (list == null || list.isEmpty()) continue;
+            if (r.nextFloat() < emptyChance(type)) continue;
+            install(iGun, gun, list.get(r.nextInt(list.size())));
+        }
+        if (!mags.isEmpty()) install(iGun, gun, mags.get(r.nextInt(mags.size())));
+
+        // 확장 탄창 용량까지 꽉 채우기
+        iGun.setCurrentAmmoCount(gun, AttachmentDataUtils.getAmmoCountWithAttachment(gun, data));
+    }
+
+    private static void install(IGun iGun, ItemStack gun, ResourceLocation id) {
+        iGun.installAttachment(gun, AttachmentItemBuilder.create().setId(id).build());
+    }
+
+    private static float emptyChance(AttachmentType type) {
+        String key = type.name().toLowerCase();
+        for (String e : BodyCamConfig.ATTACHMENT_EMPTY_CHANCE.get()) {
+            int eq = e.indexOf('=');
+            if (eq > 0 && e.substring(0, eq).trim().equals(key)) {
+                try {
+                    return Float.parseFloat(e.substring(eq + 1).trim());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        return 0f;
+    }
 
     private static final ResourceLocation AMMO_BOX_ID = new ResourceLocation("tacz", "ammo_box");
     private static final int MAX_BOX_LEVEL = 2;  // 0 철, 1 금, 2 다이아
@@ -60,11 +124,19 @@ public final class LoadoutManager {
     public static boolean isEnabled() { return enabled; }
     public static void setEnabled(boolean value) { enabled = value; }
 
-    // 사망 시 사라지는 대상품: 총, 탄약, 탄약 상자
+    // 사망 시 사라지는 대상품: 총, 탄약, 탄약 상자, 투척물, 직급 장비
     public static boolean isTarget(ItemStack s) {
         return s.getItem() instanceof IGun
                 || s.getItem() instanceof IAmmo
-                || s.getItem() instanceof IAmmoBox;
+                || s.getItem() instanceof IAmmoBox
+                || isThrowable(s)
+                || (s.hasTag() && s.getTag().getBoolean(KIT_TAG));
+    }
+
+    private static boolean isThrowable(ItemStack s) {
+        if (s.isEmpty()) return false;
+        ResourceLocation key = ForgeRegistries.ITEMS.getKey(s.getItem());
+        return key != null && BodyCamConfig.THROWABLE_POOL.get().contains(key.toString());
     }
 
     // 사망 후에도 유지되는 물품: 총기 부착물 (갑옷은 슬롯으로 판단)
@@ -95,7 +167,7 @@ public final class LoadoutManager {
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
             if (isTarget(s)) {
-                attachments.addAll(extractAttachments(s));
+                if (!BodyCamConfig.RANDOM_ATTACHMENTS.get()) attachments.addAll(extractAttachments(s));
                 inv.setItem(i, ItemStack.EMPTY);
             }
         }
@@ -215,17 +287,17 @@ public final class LoadoutManager {
         List<Map.Entry<ResourceLocation, CommonGunIndex>> primaries = new ArrayList<>();
         List<Map.Entry<ResourceLocation, CommonGunIndex>> secondaries = new ArrayList<>();
 
-        for (Map.Entry<ResourceLocation, CommonGunIndex> entry : TimelessAPI.getAllCommonGunIndex()) {
-            if (BLACKLIST.contains(entry.getKey())) continue;
+        for (Map.Entry<ResourceLocation, CommonGunIndex> entry : TimelessAPI.getAllCommonGunIndex()) {            if (BodyCamConfig.GUN_BLACKLIST.get().contains(entry.getKey().toString())) continue;
             String type = entry.getValue().getType();
-            if (PRIMARY_TYPES.contains(type)) primaries.add(entry);
-            else if (SECONDARY_TYPES.contains(type)) secondaries.add(entry);
+            if (BodyCamConfig.PRIMARY_TYPES.get().contains(type)) primaries.add(entry);
+            else if (BodyCamConfig.SECONDARY_TYPES.get().contains(type)) secondaries.add(entry);
         }
 
         List<ItemStack> guns = new ArrayList<>();
         RandomSource r = p.getRandom();
         if (!primaries.isEmpty()) guns.add(giveGun(p, primaries.get(r.nextInt(primaries.size())), 0));
         if (!secondaries.isEmpty()) guns.add(giveGun(p, secondaries.get(r.nextInt(secondaries.size())), 1));
+        giveThrowables(p);
         return guns;
     }
 
@@ -243,12 +315,14 @@ public final class LoadoutManager {
                 .setAmmoCount(data.getAmmoAmount())
                 .build();
 
+        if (BodyCamConfig.RANDOM_ATTACHMENTS.get()) randomizeAttachments(gun, data, p.getRandom());
+
         Inventory inv = p.getInventory();
         if (inv.getItem(slot).isEmpty()) inv.setItem(slot, gun);
-        else give(p, gun);
+        else giveHotbar(p, gun);
 
-        int mags = SPARE_MAGS.getOrDefault(type, 4);
-        int total = Math.max(data.getAmmoAmount() * mags, MIN_SPARE_AMMO.getOrDefault(type, 0));
+        int mags = lookup(BodyCamConfig.SPARE_MAGS.get(), type, 4);
+        int total = Math.max(data.getAmmoAmount() * mags, lookup(BodyCamConfig.MIN_SPARE_AMMO.get(), type, 0));
         giveAmmoBoxes(p, data.getAmmoId(), total);
         return gun;
     }
@@ -279,8 +353,95 @@ public final class LoadoutManager {
         return box.setAmmoLevel(stack, level);
     }
 
+    // 인벤토리 안쪽(10~36번 칸) 우선, 없으면 아무 곳, 그래도 없으면 바닥
     private static void give(ServerPlayer p, ItemStack s) {
         if (s.isEmpty()) return;
-        if (!p.getInventory().add(s)) p.drop(s, false);
+        Inventory inv = p.getInventory();
+        for (int i = 9; i < 36 && !s.isEmpty(); i++) {
+            ItemStack cur = inv.getItem(i);
+            if (cur.isEmpty()) {
+                inv.setItem(i, s);
+                return;
+            }
+            if (ItemStack.isSameItemSameTags(cur, s) && cur.getCount() < cur.getMaxStackSize()) {
+                int move = Math.min(s.getCount(), cur.getMaxStackSize() - cur.getCount());
+                cur.grow(move);
+                s.shrink(move);
+            }
+        }
+        if (!s.isEmpty() && !inv.add(s)) p.drop(s, false);
+    }
+
+    // 핫바 앞쪽부터: 같은 아이템이 있으면 겹치고, 없으면 첫 빈칸
+    private static void giveHotbar(ServerPlayer p, ItemStack s) {
+        if (s.isEmpty()) return;
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < 9 && !s.isEmpty(); i++) {
+            ItemStack cur = inv.getItem(i);
+            if (!cur.isEmpty() && ItemStack.isSameItemSameTags(cur, s) && cur.getCount() < cur.getMaxStackSize()) {
+                int move = Math.min(s.getCount(), cur.getMaxStackSize() - cur.getCount());
+                cur.grow(move);
+                s.shrink(move);
+            }
+        }
+        for (int i = 0; i < 9 && !s.isEmpty(); i++) {
+            if (inv.getItem(i).isEmpty()) {
+                inv.setItem(i, s);
+                return;
+            }
+        }
+        give(p, s);  // 핫바가 꽉 찼으면 인벤토리로
+    }
+
+
+    // ── 직급별 고정 장비 ──
+    public static void giveRoleKit(ServerPlayer p, @Nullable String role) {
+        if (role == null || role.isEmpty()) return;
+        for (String line : BodyCamConfig.ROLE_KITS.get()) {
+            int eq = line.indexOf('=');
+            if (eq < 0 || !line.substring(0, eq).trim().equals(role)) continue;
+
+            for (String part : line.substring(eq + 1).split(",")) {
+                String s = part.trim();
+                if (s.isEmpty()) continue;
+                int count = 1;
+                int star = s.indexOf('*');
+                if (star >= 0) {
+                    try {
+                        count = Integer.parseInt(s.substring(star + 1).trim());
+                    } catch (NumberFormatException ignored) {
+                    }
+                    s = s.substring(0, star).trim();
+                }
+                ResourceLocation id = ResourceLocation.tryParse(s);
+                Item item = id == null ? null : ForgeRegistries.ITEMS.getValue(id);
+                if (item == null || item == Items.AIR) continue;  // 없는 모드 아이템은 건너뜀
+
+                int max = new ItemStack(item).getMaxStackSize();
+                while (count > 0) {
+                    int n = Math.min(count, max);
+                    ItemStack stack = new ItemStack(item, n);
+                    stack.getOrCreateTag().putBoolean(KIT_TAG, true);
+                    giveHotbar(p, stack);
+                    count -= n;
+                }
+            }
+        }
+    }
+
+    // ── 투척물 랜덤 지급 ──
+    private static void giveThrowables(ServerPlayer p) {
+        List<Item> pool = new ArrayList<>();
+        for (String id : BodyCamConfig.THROWABLE_POOL.get()) {
+            Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(id));
+            if (item != null && item != Items.AIR) pool.add(item);
+        }
+        if (pool.isEmpty()) return;
+
+        RandomSource r = p.getRandom();
+        int count = BodyCamConfig.THROWABLE_COUNT.get();
+        for (int i = 0; i < count; i++) {
+            giveHotbar(p, new ItemStack(pool.get(r.nextInt(pool.size()))));
+        }
     }
 }

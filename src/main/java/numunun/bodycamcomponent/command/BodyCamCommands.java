@@ -3,6 +3,8 @@ package numunun.bodycamcomponent.command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -24,6 +26,7 @@ import numunun.bodycamcomponent.game.Region;
 import numunun.bodycamcomponent.game.Selections;
 import numunun.bodycamcomponent.loadout.LoadoutManager;
 import numunun.bodycamcomponent.registry.ModItems;
+import numunun.bodycamcomponent.config.BodyCamConfig;
 
 import java.util.List;
 
@@ -73,14 +76,15 @@ public final class BodyCamCommands {
 
                 .then(Commands.literal("team").then(Commands.literal("setup").executes(ctx -> {
                     Scoreboard sb = ctx.getSource().getServer().getScoreboard();
-                    setupTeam(sb, "blue", ChatFormatting.BLUE);
-                    setupTeam(sb, "red", ChatFormatting.RED);
-                    return ok(ctx, "blue, red 팀을 설정했습니다. 배정: /team join <팀> <플레이어>");
+                    setupTeam(sb, "blue", "케스트렐", ChatFormatting.BLUE);
+                    setupTeam(sb, "red", "볼코프", ChatFormatting.RED);
+                    return ok(ctx, "케스트렐(blue), 볼코프(red) 팀을 설정했습니다. 배정: /team join <blue|red> <플레이어>");
                 })))
 
                 .then(Commands.literal("mode")
                         .then(Commands.literal("tdm").executes(ctx -> setMode(ctx, GameMode.TDM)))
-                        .then(Commands.literal("ffa").executes(ctx -> setMode(ctx, GameMode.FFA))))
+                        .then(Commands.literal("ffa").executes(ctx -> setMode(ctx, GameMode.FFA)))
+                        .then(Commands.literal("dom").executes(ctx -> setMode(ctx, GameMode.DOM))))
 
                 .then(Commands.literal("target").then(Commands.argument("kills", IntegerArgumentType.integer(1, 1000)).executes(ctx -> {
                     if (GameManager.isRunning()) return fail(ctx, "경기 중에는 변경할 수 없습니다.");
@@ -91,12 +95,71 @@ public final class BodyCamCommands {
                     return ok(ctx, "목표 킬 수: " + kills);
                 })))
 
+                .then(Commands.literal("respawn").then(Commands.argument("seconds", IntegerArgumentType.integer(0, 300)).executes(ctx -> {
+                    int sec = IntegerArgumentType.getInteger(ctx, "seconds");
+                    BodyCamConfig.RESPAWN_DELAY.set(sec);
+                    BodyCamConfig.RESPAWN_DELAY.save();
+                    return ok(ctx, "리스폰 대기 시간: " + sec + "초 (다음 경기부터 적용)");
+                })))
+
+                .then(Commands.literal("point")
+                        .then(Commands.literal("add").then(Commands.argument("name", StringArgumentType.word()).executes(ctx -> {
+                            if (GameManager.isRunning()) return fail(ctx, "경기 중에는 변경할 수 없습니다.");
+                            ServerPlayer p = ctx.getSource().getPlayerOrException();
+                            String name = StringArgumentType.getString(ctx, "name").toUpperCase();
+                            GameSettings s = GameSettings.get(ctx.getSource().getServer());
+                            if (s.points.size() >= 5) return fail(ctx, "거점은 최대 5개까지 만들 수 있습니다.");
+                            if (s.points.stream().anyMatch(pt -> pt.name().equals(name))) return fail(ctx, "이미 있는 거점 이름입니다.");
+                            BlockPos center = p.blockPosition().below();
+                            s.points.add(new GameSettings.CapturePoint(name, p.level().dimension(), center));
+                            s.setDirty();
+                            return ok(ctx, "거점 " + name + " 추가: (" + center.getX() + ", " + center.getY() + ", " + center.getZ() + ")");
+                        })))
+                        .then(Commands.literal("remove").then(Commands.argument("name", StringArgumentType.word()).executes(ctx -> {
+                            if (GameManager.isRunning()) return fail(ctx, "경기 중에는 변경할 수 없습니다.");
+                            String name = StringArgumentType.getString(ctx, "name").toUpperCase();
+                            GameSettings s = GameSettings.get(ctx.getSource().getServer());
+                            if (!s.points.removeIf(pt -> pt.name().equals(name))) return fail(ctx, "그런 거점이 없습니다.");
+                            s.setDirty();
+                            return ok(ctx, "거점 " + name + " 삭제");
+                        })))
+                        .then(Commands.literal("list").executes(ctx -> {
+                            GameSettings s = GameSettings.get(ctx.getSource().getServer());
+                            if (s.points.isEmpty()) return ok(ctx, "거점이 없습니다.");
+                            StringBuilder sb = new StringBuilder("거점 목록:");
+                            for (GameSettings.CapturePoint pt : s.points) {
+                                sb.append("\n  ").append(pt.name()).append(": (").append(pt.center().getX()).append(", ")
+                                        .append(pt.center().getY()).append(", ").append(pt.center().getZ()).append(")");
+                            }
+                            return ok(ctx, sb.toString());
+                        })))
+                .then(Commands.literal("domtarget").then(Commands.argument("score", IntegerArgumentType.integer(1, 10000)).executes(ctx -> {
+                    if (GameManager.isRunning()) return fail(ctx, "경기 중에는 변경할 수 없습니다.");
+                    int score = IntegerArgumentType.getInteger(ctx, "score");
+                    GameSettings s = GameSettings.get(ctx.getSource().getServer());
+                    s.domTargetScore = score;
+                    s.setDirty();
+                    return ok(ctx, "점령전 목표 점수: " + score);
+                })))
+
                 .then(Commands.literal("start").executes(ctx -> {
                     String err = GameManager.start(ctx.getSource().getServer());
                     return err == null ? 1 : fail(ctx, err);
                 }))
                 .then(Commands.literal("stop").executes(ctx ->
                         GameManager.stop(ctx.getSource().getServer()) ? 1 : fail(ctx, "진행 중인 경기가 없습니다.")))
+                .then(Commands.literal("end")
+                        .executes(ctx -> GameManager.forceEnd(ctx.getSource().getServer(), null)
+                                ? 1 : fail(ctx, "진행 중인 경기가 없습니다."))
+                        .then(Commands.argument("winner", TeamArgument.team()).executes(ctx ->
+                                GameManager.forceEnd(ctx.getSource().getServer(), TeamArgument.getTeam(ctx, "winner").getName())
+                                        ? 1 : fail(ctx, "진행 중인 경기가 없습니다."))))
+                .then(Commands.literal("pause").executes(ctx ->
+                        GameManager.pause(ctx.getSource().getServer(), "관리자가 경기를 일시정지했습니다.")
+                                ? 1 : fail(ctx, "진행 중인 경기가 없거나 이미 일시정지 상태입니다.")))
+                .then(Commands.literal("resume").executes(ctx ->
+                        GameManager.resume(ctx.getSource().getServer())
+                                ? ok(ctx, "3초 뒤 경기를 재개합니다.") : fail(ctx, "일시정지 상태가 아닙니다.")))
                 .then(Commands.literal("status").executes(ctx ->
                         ok(ctx, GameManager.status(ctx.getSource().getServer()))))
 
@@ -128,11 +191,11 @@ public final class BodyCamCommands {
         return ok(ctx, "모드: " + mode.label);
     }
 
-    private static void setupTeam(Scoreboard sb, String name, ChatFormatting color) {
-        PlayerTeam t = sb.getPlayerTeam(name);
-        if (t == null) t = sb.addPlayerTeam(name);
+    private static void setupTeam(Scoreboard sb, String id, String displayName, ChatFormatting color) {
+        PlayerTeam t = sb.getPlayerTeam(id);
+        if (t == null) t = sb.addPlayerTeam(id);
         t.setColor(color);
-        t.setDisplayName(Component.literal(name.toUpperCase()).withStyle(color));
+        t.setDisplayName(Component.literal(displayName).withStyle(color));
         t.setAllowFriendlyFire(true);
         t.setNameTagVisibility(Team.Visibility.NEVER);
     }

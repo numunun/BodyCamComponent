@@ -1,3 +1,6 @@
 {
-  "item.bodycamcomponent.region_wand": "구역 지정 도구"
+  "item.bodycamcomponent.region_wand": "구역 지정 도구",
+  "entity.bodycamcomponent.corpse": "시체",
+  "key.bodycamcomponent.ping": "핑 찍기",
+  "key.categories.bodycamcomponent": "BodyCam"
 }

@@ -9,6 +9,7 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
+import numunun.bodycamcomponent.game.GameManager;
 
 import java.util.List;
 
@@ -39,6 +40,8 @@ public final class LoadoutEvents {
     public static void onRespawn(PlayerEvent.PlayerRespawnEvent e) {
         if (e.isEndConquered()) return;
         if (!(e.getEntity() instanceof ServerPlayer p)) return;
+        // 경기 참가자는 GameManager가 리스폰 대기 후 지급
+        if (GameManager.isParticipant(p)) return;
 
         List<ItemStack> guns = LoadoutManager.isEnabled()
                 ? LoadoutManager.giveRandomLoadout(p)

@@ -90,6 +90,11 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
         }
 
+        client2 {
+            parent runs.client
+            args '--username', 'Dev2'
+        }
+
         server {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
@@ -120,6 +125,11 @@ repositories {
         url = "https://cursemaven.com"
         content { includeGroup "curse.maven" }
     }
+
+    maven {
+        name = 'Kotlin for Forge'
+        url = 'https://thedarkcolour.github.io/KotlinForForge/'
+    }
 }
 
 dependencies {
@@ -133,6 +143,13 @@ dependencies {
     implementation fg.deobf("curse.maven:tacz-1028108:9037989")
     runtimeOnly fg.deobf("curse.maven:embeddium-908741:5681725")
     runtimeOnly fg.deobf("curse.maven:oculus-581495:6020952")
+    // runtimeOnly fg.deobf("curse.maven:playerrevive-266890:6048921")
+    // runtimeOnly fg.deobf("curse.maven:creativecore-257814:8947229")
+    runtimeOnly fg.deobf("curse.maven:superbwarfare-1218165:9019882")
+    runtimeOnly 'thedarkcolour:kotlinforforge:4.12.0'
+    runtimeOnly fg.deobf("curse.maven:geckolib-388172:8285794")   // 4.4.6 이상
+    runtimeOnly fg.deobf("curse.maven:curios-309927:6418456")     // 5.4.2 이상
+    runtimeOnly fg.deobf("curse.maven:ragdollfied-1417732:9022285")
 
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime

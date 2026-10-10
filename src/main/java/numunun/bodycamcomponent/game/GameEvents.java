@@ -9,8 +9,15 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.server.ServerLifecycleHooks;
 import numunun.bodycamcomponent.BodyCamComponent;
 import numunun.bodycamcomponent.registry.ModItems;
+import numunun.bodycamcomponent.config.BodyCamConfig;
+import numunun.bodycamcomponent.entity.CorpseEntity;
 
 @Mod.EventBusSubscriber(modid = BodyCamComponent.MODID)
 public final class GameEvents {
@@ -31,6 +38,11 @@ public final class GameEvents {
                 && e.getSource().getEntity() instanceof ServerPlayer attacker
                 && attacker != victim) {
             GameManager.recordAttack(victim, attacker);
+
+            double mult = BodyCamConfig.LEADER_DAMAGE_MULTIPLIER.get();
+            if (mult != 1.0 && GameManager.isLeader(attacker)) {
+                e.setAmount((float) (e.getAmount() * mult));
+            }
         }
     }
 
@@ -39,6 +51,7 @@ public final class GameEvents {
     public static void onDeath(LivingDeathEvent e) {
         if (e.getEntity() instanceof ServerPlayer p) {
             GameManager.onDeath(p, e.getSource());
+            if (BodyCamConfig.CORPSE_ENABLED.get()) CorpseEntity.spawnFor(p);
         }
     }
 
@@ -51,6 +64,40 @@ public final class GameEvents {
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent e) {
-        GameManager.reset();
+        GameManager.reset(e.getServer());
+    }
+
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent e) {
+        if (e.phase != TickEvent.Phase.END) return;
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            GameManager.tick(server);
+            PingManager.tickSpotting(server);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onLogout(PlayerEvent.PlayerLoggedOutEvent e) {
+        if (e.getEntity() instanceof ServerPlayer p) GameManager.onLogout(p);
+    }
+
+    // 개발 환경 전용: LAN으로 두 번째 클라이언트가 접속할 수 있게 정품 인증 끄기
+    @SubscribeEvent
+    public static void onServerStarting(ServerStartingEvent e) {
+        if (!FMLEnvironment.production) {
+            e.getServer().setUsesAuthentication(false);
+        }
+    }
+
+    // 일시정지 중 플레이어 피해 차단
+    @SubscribeEvent
+    public static void onAttack(LivingAttackEvent e) {
+        if (GameManager.isPaused() && e.getEntity() instanceof ServerPlayer) e.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void onLogin(PlayerEvent.PlayerLoggedInEvent e) {
+        if (e.getEntity() instanceof ServerPlayer p) GameManager.onLogin(p);
     }
 }

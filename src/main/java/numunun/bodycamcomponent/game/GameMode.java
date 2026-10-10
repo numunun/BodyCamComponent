@@ -2,7 +2,8 @@ package numunun.bodycamcomponent.game;
 
 public enum GameMode {
     FFA("ffa", "개인전"),
-    TDM("tdm", "팀 데스매치");
+    TDM("tdm", "팀 데스매치"),
+    DOM("dom", "점령전");
 
     public final String id;
     public final String label;
@@ -10,6 +11,10 @@ public enum GameMode {
     GameMode(String id, String label) {
         this.id = id;
         this.label = label;
+    }
+
+    public boolean isTeamMode() {
+        return this != FFA;
     }
 
     public static GameMode byId(String id) {

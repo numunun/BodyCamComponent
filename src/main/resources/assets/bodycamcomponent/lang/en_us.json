@@ -1,3 +1,6 @@
 {
-  "item.bodycamcomponent.region_wand": "Region Wand"
+  "item.bodycamcomponent.region_wand": "Region Wand",
+  "entity.bodycamcomponent.corpse": "Corpse",
+  "key.bodycamcomponent.ping": "Ping",
+  "key.categories.bodycamcomponent": "BodyCam"
 }

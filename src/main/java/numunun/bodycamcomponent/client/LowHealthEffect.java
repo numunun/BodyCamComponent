@@ -19,7 +19,10 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraft.world.entity.player.Player;
+import java.lang.reflect.Method;
 import numunun.bodycamcomponent.BodyCamComponent;
+import numunun.bodycamcomponent.compat.PlayerReviveCompat;
 import org.joml.Matrix4f;
 
 @Mod.EventBusSubscriber(modid = BodyCamComponent.MODID, value = Dist.CLIENT)
@@ -34,9 +37,12 @@ public final class LowHealthEffect {
     private static float saturation = 1f;
     private static long lastNanos = 0L;
     private static boolean wasDead = false;
+    private static boolean reviveChecked = false;
+    private static Method reviveIsBleeding;
 
     private static float targetSaturation(LocalPlayer p) {
         if (p.isCreative() || p.isSpectator()) return 1f;
+        if (PlayerReviveCompat.isBleeding(p)) return MIN_SATURATION;   // 추가: 빈사 상태면 완전 흑백
         float ratio = p.getHealth() / p.getMaxHealth();
         float t = Mth.clamp((ratio - END) / (START - END), 0f, 1f);
         return Mth.lerp(t, MIN_SATURATION, 1f);
@@ -111,5 +117,25 @@ public final class LowHealthEffect {
         bb.vertex(m, sw, 0, 0).uv(1, 1).endVertex();
         bb.vertex(m, 0, 0, 0).uv(0, 1).endVertex();
         BufferUploader.drawWithShader(bb.end());
+    }
+
+    // PlayerRevive 빈사 상태 확인 (PlayerRevive 없어도 동작)
+    private static boolean isBleeding(Player p) {
+        if (!reviveChecked) {
+            reviveChecked = true;
+            try {
+                Class<?> c = Class.forName("team.creative.playerrevive.server.PlayerReviveServer");
+                reviveIsBleeding = c.getMethod("isBleeding", Player.class);
+            } catch (Throwable t) {
+                reviveIsBleeding = null;
+            }
+        }
+        if (reviveIsBleeding == null) return false;
+        try {
+            return (boolean) reviveIsBleeding.invoke(null, p);
+        } catch (Throwable t) {
+            reviveIsBleeding = null;
+            return false;
+        }
     }
 }
