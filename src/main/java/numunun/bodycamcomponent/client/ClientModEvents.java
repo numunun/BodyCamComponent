@@ -45,13 +45,19 @@ public final class ClientModEvents {
         };
     }
 
+    // 쉐이더가 그래픽 카드에서 컴파일되지 않아도 게임은 켜지게 (저체력 흑백 효과만 꺼짐)
     @SubscribeEvent
-    public static void registerShaders(RegisterShadersEvent e) throws IOException {
-        e.registerShader(
-                new ShaderInstance(e.getResourceProvider(),
-                        new ResourceLocation(BodyCamComponent.MODID, "bodycam_desaturate"),
-                        DefaultVertexFormat.POSITION_TEX),
-                shader -> LowHealthEffect.shader = shader);
+    public static void registerShaders(RegisterShadersEvent e) {
+        try {
+            e.registerShader(
+                    new ShaderInstance(e.getResourceProvider(),
+                            new ResourceLocation(BodyCamComponent.MODID, "bodycam_desaturate"),
+                            DefaultVertexFormat.POSITION_TEX),
+                    shader -> LowHealthEffect.shader = shader);
+        } catch (Exception ex) {
+            LowHealthEffect.shader = null;
+            BodyCamLog.error("흑백 쉐이더 불러오기 (저체력 흑백 효과 꺼짐)", ex);
+        }
     }
 
     @SubscribeEvent

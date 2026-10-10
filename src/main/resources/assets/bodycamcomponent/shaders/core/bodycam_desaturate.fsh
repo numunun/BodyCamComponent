@@ -10,7 +10,7 @@ void main() {
     vec3 color = texture(Sampler0, texCoord).rgb;
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
-    // 색이 빠질수록 대비도 살짝 낮춰서 흐릿한 느낌
+    // Lower the contrast slightly as color fades out
     float fade = 1.0 - Saturation;
     vec3 gray = mix(vec3(luma), vec3(0.45), fade * 0.15);
 
