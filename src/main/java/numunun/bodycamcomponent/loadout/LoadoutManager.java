@@ -7,6 +7,7 @@ import com.tacz.guns.api.item.IAttachment;
 import com.tacz.guns.api.item.IGun;
 import com.tacz.guns.api.item.builder.GunItemBuilder;
 import com.tacz.guns.api.item.gun.FireMode;
+import com.tacz.guns.api.entity.IGunOperator;
 import com.tacz.guns.resource.index.CommonGunIndex;
 import com.tacz.guns.resource.pojo.data.gun.GunData;
 import net.minecraft.nbt.CompoundTag;
@@ -82,6 +83,7 @@ public final class LoadoutManager {
 
     // ── 대상품 제거 (부착물 옮겨 달기 모드면 장착 부착물 회수) ──
     public static List<ItemStack> clearTargets(ServerPlayer p) {
+        Safe.run("총 상태 초기화", () -> IGunOperator.fromLivingEntity(p).initialData());
         Inventory inv = p.getInventory();
         List<ItemStack> attachments = new ArrayList<>();
         boolean carryOver = !BodyCamConfig.RANDOM_ATTACHMENTS.get();
@@ -93,6 +95,13 @@ public final class LoadoutManager {
             }
         }
         return attachments;
+    }
+
+    // 총을 바꿔 끼운 뒤 TaCZ에 "새 총을 꺼냈다"고 알림.
+    // 이전 총의 재장전, 노리쇠 상태가 새 총에 이어지면 총기 스크립트가 오류를 내고,
+    // 새 총의 부착물 효과도 이때 다시 계산됨
+    public static void refreshHeldGun(ServerPlayer p) {
+        Safe.run("새 총 꺼내기", () -> IGunOperator.fromLivingEntity(p).draw(p::getMainHandItem));
     }
 
     // ── 사망 시: 대상품 제거, 유지 물품과 장착 부착물 보관 ──

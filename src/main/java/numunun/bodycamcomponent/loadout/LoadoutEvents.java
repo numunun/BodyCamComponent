@@ -51,6 +51,7 @@ public final class LoadoutEvents {
                     ? LoadoutManager.giveRandomLoadout(p)
                     : List.of();
             LoadoutManager.restoreAfterRespawn(p, guns);
+            LoadoutManager.refreshHeldGun(p);
         });
     }
 }

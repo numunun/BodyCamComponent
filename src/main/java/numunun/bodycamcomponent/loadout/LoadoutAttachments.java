@@ -8,6 +8,7 @@ import com.tacz.guns.api.item.builder.AttachmentItemBuilder;
 import com.tacz.guns.resource.index.CommonAttachmentIndex;
 import com.tacz.guns.resource.pojo.data.gun.GunData;
 import com.tacz.guns.util.AttachmentDataUtils;
+import com.tacz.guns.resource.pojo.data.attachment.AttachmentData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
@@ -15,6 +16,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import numunun.bodycamcomponent.config.BodyCamConfig;
 
+import java.util.Set;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -29,6 +31,9 @@ final class LoadoutAttachments {
             AttachmentType.SCOPE, AttachmentType.MUZZLE, AttachmentType.GRIP,
             AttachmentType.LASER, AttachmentType.STOCK
     };
+    // 탄약 개조(고폭탄, 소이탄, 철갑탄 등)는 확장 탄창 칸을 쓰지만 진짜 탄창이 아니라서 제외
+    private static final Set<String> AMMO_MOD_KEYS = Set.of(
+            "damage", "armor_ignore", "pierce", "explosion", "ignite", "ammo_speed", "head_shot", "rpm");
 
     private LoadoutAttachments() {}
 
@@ -71,14 +76,25 @@ final class LoadoutAttachments {
 
             AttachmentType type = e.getValue().getType();
             if (type == AttachmentType.EXTENDED_MAG) {
-                if (e.getValue().getData() != null && e.getValue().getData().getExtendedMagLevel() == 1) {
-                    mags.add(e.getKey());  // 확장 탄창은 1단계만
+                AttachmentData d = e.getValue().getData();
+                if (d != null && d.getExtendedMagLevel() == 1 && !isAmmoMod(e.getKey(), d)) {
+                    mags.add(e.getKey());  // 확장 탄창은 1단계만, 탄약 개조는 제외
                 }
             } else {
                 byType.computeIfAbsent(type, k -> new ArrayList<>()).add(e.getKey());
             }
         }
         return new Compat(byType, mags);
+    }
+
+    private static boolean isAmmoMod(ResourceLocation id, AttachmentData d) {
+        if (id.getPath().contains("ammo_mod")) return true;
+        Map<String, ?> mod = d.getModifier();
+        if (mod == null) return false;
+        for (String key : AMMO_MOD_KEYS) {
+            if (mod.containsKey(key)) return true;
+        }
+        return false;
     }
 
     private static void install(IGun iGun, ItemStack gun, ResourceLocation id) {

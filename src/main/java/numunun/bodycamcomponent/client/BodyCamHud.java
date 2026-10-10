@@ -23,6 +23,8 @@ import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import java.util.Locale;
+import numunun.bodycamcomponent.network.AbilityClientData;
 import numunun.bodycamcomponent.BodyCamComponent;
 import org.joml.Matrix4f;
 
@@ -188,5 +190,17 @@ public final class BodyCamHud {
 
         g.drawString(font, line1, w - font.width(line1) - 6, 6, 0xFFFFFF, true);
         g.drawString(font, line2, w - font.width(line2) - 6, 16, 0xFFFFFF, true);
+        // 경기 중: 직급 · 팀 (팀 이름은 팀 색)
+        String role = AbilityClientData.role;
+        if (!role.isEmpty()) {
+            String roleText = role.toUpperCase(Locale.ROOT);
+            String team = AbilityClientData.team.toUpperCase(Locale.ROOT);
+            String head = team.isEmpty() ? roleText : roleText + " · ";
+            int x = w - font.width(head + team) - 6;
+            g.drawString(font, head, x, 26, 0xFFFFFF, true);
+            if (!team.isEmpty()) {
+                g.drawString(font, team, x + font.width(head), 26, 0xFF000000 | AbilityClientData.teamColor, true);
+            }
+        }
     }
 }

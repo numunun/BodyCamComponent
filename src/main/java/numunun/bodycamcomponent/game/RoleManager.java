@@ -5,6 +5,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Team;
 import net.minecraftforge.network.PacketDistributor;
 import numunun.bodycamcomponent.config.BodyCamConfig;
 import numunun.bodycamcomponent.network.AbilitySyncPacket;
@@ -130,14 +132,36 @@ final class RoleManager {
         }
     }
 
-    // 작전관: 아군 벽 너머 표시 (클라이언트에 알림)
+    // 작전관: 아군 벽 너머 표시 + 오른쪽 위 직급/팀 표시 (영어 이름)
     static void sendAbility(ServerPlayer p) {
-        BodyCamNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> p), new AbilitySyncPacket(isOperator(p)));
+        String role = roleOf(p);
+        String roleEn = role != null ? lookup(BodyCamConfig.ROLE_TITLES_EN.get(), role, role) : "";
+
+        String teamEn = "";
+        int color = 0xFFFFFF;
+        Team t = p.getTeam();
+        if (t != null && GameManager.mode().isTeamMode()) {
+            teamEn = lookup(BodyCamConfig.TEAM_NAMES_EN.get(), t.getName(), GameManager.teamDisplay(p.server, t.getName()));
+            PlayerTeam pt = p.server.getScoreboard().getPlayerTeam(t.getName());
+            Integer c = pt != null ? pt.getColor().getColor() : null;
+            if (c != null) color = c;
+        }
+        BodyCamNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> p),
+                new AbilitySyncPacket(roleEn, teamEn, color, isOperator(p)));
+    }
+
+    // "키=값" 목록에서 값 찾기, 없으면 fallback
+    private static String lookup(List<? extends String> entries, String key, String fallback) {
+        for (String e : entries) {
+            int eq = e.indexOf('=');
+            if (eq > 0 && e.substring(0, eq).trim().equals(key)) return e.substring(eq + 1).trim();
+        }
+        return fallback;
     }
 
     // 경기 종료: 능력 해제, 원래 체력으로
     static void clear(MinecraftServer server) {
-        BodyCamNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new AbilitySyncPacket(false));
+        BodyCamNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new AbilitySyncPacket("", "", 0xFFFFFF, false));
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             AttributeInstance inst = p.getAttribute(Attributes.MAX_HEALTH);
             if (inst != null && inst.getModifier(LEADER_HEALTH_ID) != null) {

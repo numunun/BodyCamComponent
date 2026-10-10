@@ -140,19 +140,23 @@ public final class DownedManager {
             // 포기: Shift 유지
             if (p.isShiftKeyDown()) {
                 if (++st.giveUpTicks >= GIVE_UP_TICKS) {
+                    MatchLog.event("포기: " + p.getScoreboardName());
                     states.remove(p.getUUID());
                     changed = true;
                     p.kill();
-                    MatchLog.event("포기: " + p.getScoreboardName());
                     continue;
                 }
+                // 누르고 있는 동안 남은 시간 표시
+                float left = (GIVE_UP_TICKS - st.giveUpTicks) / 20f;
+                p.displayClientMessage(Component.literal(String.format("포기까지 %.1f초 · Shift를 떼면 취소", left))
+                        .withStyle(ChatFormatting.DARK_RED), true);
             } else {
                 st.giveUpTicks = 0;
             }
 
             // 치료: 팀원이 옆에서 웅크리면 진행, 치료 중엔 출혈 멈춤
             ServerPlayer helper = findReviver(p);
-            if (helper != null) {
+            if (helper == null && st.giveUpTicks == 0) {
                 String helperRole = GameManager.roleOf(helper);
                 st.reviveProgress += BodyCamConfig.MEDIC_ROLE.get().equals(helperRole) ? 2 : 1;  // 의무병은 2배
                 if (st.reviveProgress >= reviveTicks) {

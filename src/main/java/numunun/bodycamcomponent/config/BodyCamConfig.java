@@ -38,6 +38,8 @@ public final class BodyCamConfig {
     public static final ForgeConfigSpec.BooleanValue RANDOM_ATTACHMENTS;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ATTACHMENT_EMPTY_CHANCE;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ATTACHMENT_BLACKLIST;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ROLE_TITLES_EN;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> TEAM_NAMES_EN;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -60,6 +62,20 @@ public final class BodyCamConfig {
                 .defineList("roleTitles", List.of(
                         "팀장", "작전관", "정찰 지원", "화력 지원", "현장 지원", "근접 경호", "의무 지원"
                 ), o -> o instanceof String);
+        ROLE_TITLES_EN = b
+                .comment("화면 오른쪽 위에 표시할 직급의 영어 이름. 형식: \"직급=영어 이름\"")
+                .defineList("roleTitlesEnglish", List.of(
+                        "팀장=Team Leader",
+                        "작전관=Tactical Operator",
+                        "정찰 지원=Recon Support",
+                        "화력 지원=Combat Support",
+                        "현장 지원=Field Support",
+                        "근접 경호=Close Protection",
+                        "의무 지원=Medical Support"
+                ), o -> o instanceof String);
+        TEAM_NAMES_EN = b
+                .comment("화면 오른쪽 위에 표시할 팀의 영어 이름. 형식: \"팀 내부 이름=영어 이름\"")
+                .defineList("teamNamesEnglish", List.of("blue=Kestrel", "red=Volkov"), o -> o instanceof String);
         ROLE_KITS = b
                 .comment("직급별 고정 지급 장비. 형식: \"직급=아이템ID*개수,아이템ID*개수\" (개수 생략 시 1)")
                 .defineList("roleKits", List.of(

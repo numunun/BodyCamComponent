@@ -178,6 +178,7 @@ public final class BodyCamCommands {
                             List<ItemStack> guns = LoadoutManager.giveRandomLoadout(p);
                             LoadoutManager.installOrGive(p, guns, attachments);
                             LoadoutManager.autoInstallFromInventory(p, guns);
+                            LoadoutManager.refreshHeldGun(p);
                             return ok(ctx, "랜덤 장비를 지급했습니다.");
                         })))
         );

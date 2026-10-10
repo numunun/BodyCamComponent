@@ -302,6 +302,7 @@ public final class GameManager {
         heal(p);
         teleportToSpawn(p);
         RoleManager.sendAbility(p);
+        LoadoutManager.refreshHeldGun(p);
         MatchLog.event("배치: " + describe(p) + " ← " + describeGuns(guns));
     }
 
@@ -313,6 +314,7 @@ public final class GameManager {
         RoleManager.applyLeaderHealth(p);
         heal(p);
         teleportToSpawn(p);
+        LoadoutManager.refreshHeldGun(p);
         MatchLog.event("리스폰: " + p.getScoreboardName() + " ← " + describeGuns(guns));
     }
 
