@@ -40,6 +40,7 @@ public final class BodyCamConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ATTACHMENT_BLACKLIST;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ROLE_TITLES_EN;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> TEAM_NAMES_EN;
+    public static final ForgeConfigSpec.BooleanValue HIDE_CHAT_IN_MATCH;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -105,6 +106,9 @@ public final class BodyCamConfig {
         INTRO_FFA_TEXT = b
                 .comment("개인전 시작 연출에서 팀 자리에 표시할 문구")
                 .define("introFfaText", "독립 계약자");
+        HIDE_CHAT_IN_MATCH = b
+                .comment("경기 중에는 채팅창을 화면에 띄우지 않음 (T를 눌러 열면 볼 수 있음)")
+                .define("hideChatInMatch", true);
         b.pop();
 
         b.push("loadout");
