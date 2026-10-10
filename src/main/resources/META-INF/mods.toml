@@ -57,8 +57,8 @@ ordering = "NONE"
 side = "BOTH"
 
 [[dependencies."${mod_id}"]]
-modId = "tacz"
-mandatory = true
-versionRange = "*"
-ordering = "AFTER"
-side = "BOTH"
+modId="tacz"
+mandatory=true
+versionRange="[1.1,)"
+ordering="AFTER"
+side="BOTH"
