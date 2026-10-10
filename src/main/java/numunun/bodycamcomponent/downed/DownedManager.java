@@ -156,7 +156,7 @@ public final class DownedManager {
 
             // 치료: 팀원이 옆에서 웅크리면 진행, 치료 중엔 출혈 멈춤
             ServerPlayer helper = findReviver(p);
-            if (helper == null && st.giveUpTicks == 0) {
+            if (helper != null) {
                 String helperRole = GameManager.roleOf(helper);
                 st.reviveProgress += BodyCamConfig.MEDIC_ROLE.get().equals(helperRole) ? 2 : 1;  // 의무병은 2배
                 if (st.reviveProgress >= reviveTicks) {
@@ -173,15 +173,15 @@ public final class DownedManager {
                 if (--st.ticksLeft <= 0) {
                     states.remove(p.getUUID());
                     changed = true;
-                    p.kill();
                     MatchLog.event("출혈사: " + p.getScoreboardName());
+                    p.kill();
                     continue;
                 }
             }
 
             // 출혈 안내 (치료 중이 아닐 때만) + 근처 팀원 안내
             if (st.downedTicks % 10 == 0) {
-                if (helper == null) {
+                if (helper == null && st.giveUpTicks == 0) {
                     p.displayClientMessage(Component.literal("출혈 " + (st.ticksLeft + 19) / 20
                             + "초  ·  Shift를 3초 누르면 포기").withStyle(ChatFormatting.RED), true);
                 }
