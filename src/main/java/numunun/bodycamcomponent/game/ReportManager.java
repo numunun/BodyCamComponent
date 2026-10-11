@@ -2,6 +2,7 @@ package numunun.bodycamcomponent.game;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.scores.PlayerTeam;
@@ -17,6 +18,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
 
 // 경기 시작 연출 전송, 경기 종료 후 작전 보고서
 final class ReportManager {
@@ -39,6 +42,10 @@ final class ReportManager {
         startedAtMs = System.currentTimeMillis();
         Random rnd = new Random();
         codename = CODE_A[rnd.nextInt(CODE_A.length)] + " " + CODE_B[rnd.nextInt(CODE_B.length)] + " 작전";
+    }
+
+    static long durationMs() {
+        return System.currentTimeMillis() - startedAtMs;
     }
 
     static String codename() {
@@ -75,14 +82,15 @@ final class ReportManager {
         if (ScoreManager.players().isEmpty()) return;
         GameMode mode = GameManager.mode();
 
-        List<UUID> ids = new ArrayList<>(ScoreManager.players());
-        ids.sort((a, b) -> {
-            int c = Integer.compare(mvpScore(b), mvpScore(a));
-            return c != 0 ? c : Integer.compare(ScoreManager.deaths(a), ScoreManager.deaths(b));
-        });
-
         List<String> teams = new ArrayList<>(new LinkedHashSet<>(ScoreManager.teams()));
         teams.sort((a, b) -> Integer.compare(ScoreManager.teamScore(b), ScoreManager.teamScore(a)));
+
+        List<UUID> ids = new ArrayList<>(ScoreManager.players());
+        Map<UUID, Double> ratings = matchRatings(ids, teams);
+        ids.sort((a, b) -> {
+            int c = Double.compare(ratings.get(b), ratings.get(a));
+            return c != 0 ? c : Integer.compare(ScoreManager.deaths(a), ScoreManager.deaths(b));
+        });
 
         // 머리말
         send(server, Component.literal("──────── 작전 보고서 ────────").withStyle(ChatFormatting.GRAY));
@@ -100,33 +108,65 @@ final class ReportManager {
                 send(server, Component.literal("■ " + GameManager.teamDisplay(server, team) + "  "
                         + ScoreManager.teamScore(team) + unit()).withStyle(color, ChatFormatting.BOLD));
                 for (UUID id : ids) {
-                    if (team.equals(ScoreManager.teamOf(id))) send(server, resultLine("  ", id));
+                    if (team.equals(ScoreManager.teamOf(id))) send(server, resultLine("  ", id, ratings.get(id)));
                 }
             }
         } else {
             int rank = 1;
-            for (UUID id : ids) send(server, resultLine(" " + rank++ + ". ", id));
+            for (UUID id : ids) send(server, resultLine(" " + rank++ + ". ", id, ratings.get(id)));
         }
 
-        // 최우수 요원
+        // 최우수 요원: 이번 경기 평점 1등
         send(server, Component.literal("─────────────").withStyle(ChatFormatting.DARK_GRAY));
         UUID mvp = ids.get(0);
-        if (mvpScore(mvp) > 0) {
-            String role = RoleManager.roleOf(mvp);
-            send(server, Component.literal("최우수 요원  ").withStyle(ChatFormatting.DARK_GRAY)
-                    .append(Component.literal((role != null ? "[" + role + "] " : "") + ScoreManager.nameOf(mvp))
-                            .withStyle(ChatFormatting.WHITE)));
+        String mvpRole = RoleManager.roleOf(mvp);
+        send(server, Component.literal("최우수 요원  ").withStyle(ChatFormatting.DARK_GRAY)
+                .append(Component.literal((mvpRole != null ? "[" + mvpRole + "] " : "") + ScoreManager.nameOf(mvp))
+                        .withStyle(ChatFormatting.WHITE))
+                .append(ratingText(ratings.get(mvp))));
+    }
+
+    // ── 경기 평점 (절대 평가, 0.0 ~ 10.0) ──
+    // 10분 기준으로 환산한 활약을 정해진 기준으로 더하고 빼서, 0~10 곡선에 올림
+    private static Map<UUID, Double> matchRatings(List<UUID> ids, List<String> teamsByScore) {
+        double minutes = Math.max(3.0, durationMs() / 60000.0);
+        double per10 = 10.0 / minutes;
+
+        boolean teamMode = GameManager.mode().isTeamMode();
+        String winTeam = null;
+        boolean draw = false;
+        UUID ffaTop = null;
+        if (teamMode) {
+            if (teamsByScore.size() >= 2
+                    && ScoreManager.teamScore(teamsByScore.get(0)) == ScoreManager.teamScore(teamsByScore.get(1))) {
+                draw = true;
+            } else if (!teamsByScore.isEmpty()) {
+                winTeam = teamsByScore.get(0);
+            }
+        } else {
+            ffaTop = ids.stream().max((a, b) -> Integer.compare(ScoreManager.kills(a), ScoreManager.kills(b))).orElse(null);
         }
+
+        Map<UUID, Double> out = new HashMap<>();
+        for (UUID id : ids) {
+            double raw = ScoreManager.kills(id) * per10 * 0.6
+                    + ScoreManager.revives(id) * per10 * 0.4
+                    - ScoreManager.deaths(id) * per10 * 0.4
+                    - ScoreManager.teamKills(id) * 2.0
+                    - 1.0;
+            if (GameManager.mode() == GameMode.DOM) {
+                raw += DominationManager.captureSeconds(id) / 60.0 * per10 * 0.5;
+            }
+            if (teamMode) raw += draw ? 0 : (winTeam != null && winTeam.equals(ScoreManager.teamOf(id)) ? 0.7 : -0.7);
+            else if (id.equals(ffaTop)) raw += 0.7;
+
+            double rating = 10.0 / (1.0 + Math.exp(-raw / 2.5));  // 0 ~ 10 곡선 (원점수 0이면 5.0)
+            out.put(id, Math.round(rating * 10) / 10.0);
+        }
+        return out;
     }
 
-    // 사살 1 = 10점, 구조 1 = 5점, 점령 기여 1초 = 1점
-    private static int mvpScore(UUID id) {
-        int score = ScoreManager.kills(id) * 10 + ScoreManager.revives(id) * 5;
-        if (GameManager.mode() == GameMode.DOM) score += DominationManager.captureSeconds(id);
-        return score;
-    }
-
-    private static Component resultLine(String prefix, UUID id) {
+    private static Component resultLine(String prefix, UUID id, double rating) {
         String role = RoleManager.roleOf(id);
         StringBuilder sb = new StringBuilder(prefix);
         if (role != null) sb.append('[').append(role).append("] ");
@@ -138,7 +178,18 @@ final class ReportManager {
         if (GameManager.mode() == GameMode.DOM) {
             sb.append(" · 거점 ").append(formatDuration(DominationManager.captureSeconds(id) * 1000L));
         }
-        return Component.literal(sb.toString()).withStyle(ChatFormatting.WHITE);
+        return Component.literal(sb.toString()).withStyle(ChatFormatting.WHITE).append(ratingText(rating));
+    }
+
+    // " · 평점 8.1"
+    private static MutableComponent ratingText(double rating) {
+        ChatFormatting color = rating >= 8.0 ? ChatFormatting.GOLD
+                : rating >= 6.0 ? ChatFormatting.GREEN
+                : rating >= 4.0 ? ChatFormatting.WHITE
+                : rating >= 2.0 ? ChatFormatting.RED
+                : ChatFormatting.DARK_RED;
+        return Component.literal(" · 평점 ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(String.format("%.1f", rating)).withStyle(color, ChatFormatting.BOLD));
     }
 
     private static Component field(String label, String value) {

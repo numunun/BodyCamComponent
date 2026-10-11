@@ -26,6 +26,7 @@ final class ScoreManager {
     private static final Map<UUID, Integer> playerKills = new HashMap<>();
     private static final Map<UUID, Integer> playerDeaths = new HashMap<>();
     private static final Map<UUID, Integer> playerRevives = new HashMap<>();
+    private static final Map<UUID, Integer> playerTeamKills = new HashMap<>();
     private static final Map<UUID, String> playerNames = new HashMap<>();
     private static final Map<UUID, String> playerTeams = new HashMap<>();
     private static final Map<UUID, Attack> lastAttack = new HashMap<>();
@@ -38,6 +39,7 @@ final class ScoreManager {
         playerKills.clear();
         playerDeaths.clear();
         playerRevives.clear();
+        playerTeamKills.clear();
         playerNames.clear();
         playerTeams.clear();
         lastAttack.clear();
@@ -102,7 +104,10 @@ final class ScoreManager {
             Team vt = victim.getTeam();
             Team kt = killer.getTeam();
             if (kt == null) return;
-            if (vt != null && vt.getName().equals(kt.getName())) return;  // 아군 사살: 점수 없음
+            if (vt != null && vt.getName().equals(kt.getName())) {
+                playerTeamKills.merge(killer.getUUID(), 1, Integer::sum);  // 아군 사살: 점수 없음, 전투력 감점
+                return;
+            }
 
             playerKills.merge(killer.getUUID(), 1, Integer::sum);
             if (mode == GameMode.DOM) return;  // 점령전: 킬은 기록만
@@ -133,10 +138,8 @@ final class ScoreManager {
     static String teamOf(UUID id) { return playerTeams.get(id); }
 
     static int teamScore(String team) { return teamScores.getOrDefault(team, 0); }
-
     static int kills(UUID id) { return playerKills.getOrDefault(id, 0); }
-
     static int deaths(UUID id) { return playerDeaths.getOrDefault(id, 0); }
-
     static int revives(UUID id) { return playerRevives.getOrDefault(id, 0); }
+    static int teamKills(UUID id) { return playerTeamKills.getOrDefault(id, 0); }
 }

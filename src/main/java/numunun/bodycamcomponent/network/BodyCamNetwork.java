@@ -39,5 +39,11 @@ public final class BodyCamNetwork {
         CHANNEL.registerMessage(6, AbilitySyncPacket.class,
                 AbilitySyncPacket::encode, AbilitySyncPacket::decode, AbilitySyncPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(7, TeamScreenPacket.class,
+                TeamScreenPacket::encode, TeamScreenPacket::decode, TeamScreenPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(8, TeamActionPacket.class,
+                TeamActionPacket::encode, TeamActionPacket::decode, TeamActionPacket::handle,
+                Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 }

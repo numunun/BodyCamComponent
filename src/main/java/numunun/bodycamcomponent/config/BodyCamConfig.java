@@ -41,6 +41,7 @@ public final class BodyCamConfig {
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ROLE_TITLES_EN;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> TEAM_NAMES_EN;
     public static final ForgeConfigSpec.BooleanValue HIDE_CHAT_IN_MATCH;
+    public static final ForgeConfigSpec.BooleanValue AUTO_TEAM_ON_START;
 
     static {
         ForgeConfigSpec.Builder b = new ForgeConfigSpec.Builder();
@@ -109,6 +110,9 @@ public final class BodyCamConfig {
         HIDE_CHAT_IN_MATCH = b
                 .comment("경기 중에는 채팅창을 화면에 띄우지 않음 (T를 눌러 열면 볼 수 있음)")
                 .define("hideChatInMatch", true);
+        AUTO_TEAM_ON_START = b
+                .comment("경기를 시작할 때 전투력 기준으로 팀을 자동 배정 (팀전만)")
+                .define("autoTeamOnStart", false);
         b.pop();
 
         b.push("loadout");

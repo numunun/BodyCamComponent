@@ -153,6 +153,11 @@ public final class GameManager {
     @Nullable
     public static String start(MinecraftServer server) {
         if (running) return "이미 경기가 진행 중입니다.";
+        // 설정에 따라 경기 시작 전에 전투력 기준으로 팀 자동 배정
+        if (BodyCamConfig.AUTO_TEAM_ON_START.get() && GameSettings.get(server).mode.isTeamMode()) {
+            String teamErr = TeamBalancer.autoApply(server);
+            if (teamErr != null) return teamErr;
+        }
         String err = validate(server);
         if (err != null) return err;
 
@@ -251,6 +256,7 @@ public final class GameManager {
         broadcast(server, Component.literal("[작전 종료] ").withStyle(ChatFormatting.GRAY).append(result));
         MatchLog.event("작전 종료: " + result.getString());
         ReportManager.announce(server, result);
+        Safe.run("전투력 갱신", () -> RatingManager.recordMatch(server));
         MatchLog.end();
     }
 

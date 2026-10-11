@@ -27,6 +27,7 @@ import numunun.bodycamcomponent.game.Selections;
 import numunun.bodycamcomponent.loadout.LoadoutManager;
 import numunun.bodycamcomponent.registry.ModItems;
 import numunun.bodycamcomponent.config.BodyCamConfig;
+import numunun.bodycamcomponent.game.TeamBalancer;
 
 import java.util.List;
 
@@ -74,12 +75,21 @@ public final class BodyCamCommands {
                             return ok(ctx, "'" + team.getName() + "' 팀 스폰 범위를 삭제했습니다.");
                         }))))
 
-                .then(Commands.literal("team").then(Commands.literal("setup").executes(ctx -> {
-                    Scoreboard sb = ctx.getSource().getServer().getScoreboard();
-                    setupTeam(sb, "blue", "케스트렐", ChatFormatting.BLUE);
-                    setupTeam(sb, "red", "볼코프", ChatFormatting.RED);
-                    return ok(ctx, "케스트렐(blue), 볼코프(red) 팀을 설정했습니다. 배정: /team join <blue|red> <플레이어>");
-                })))
+                .then(Commands.literal("team")
+                        .then(Commands.literal("setup").executes(ctx -> {
+                            Scoreboard sb = ctx.getSource().getServer().getScoreboard();
+                            setupTeam(sb, "blue", "케스트렐", ChatFormatting.BLUE);
+                            setupTeam(sb, "red", "볼코프", ChatFormatting.RED);
+                            return ok(ctx, "케스트렐(blue), 볼코프(red) 팀을 설정했습니다. 배정: /teams 또는 /bodycam team auto");
+                        }))
+                        .then(Commands.literal("auto").executes(ctx -> {
+                            String err = TeamBalancer.autoApply(ctx.getSource().getServer());
+                            return err == null ? 1 : fail(ctx, err);
+                        }))
+                        .then(Commands.literal("menu").executes(ctx -> {
+                            TeamBalancer.open(ctx.getSource().getPlayerOrException());
+                            return 1;
+                        })))
 
                 .then(Commands.literal("mode")
                         .then(Commands.literal("tdm").executes(ctx -> setMode(ctx, GameMode.TDM)))
@@ -182,6 +192,10 @@ public final class BodyCamCommands {
                             return ok(ctx, "랜덤 장비를 지급했습니다.");
                         })))
         );
+        e.getDispatcher().register(Commands.literal("teams").executes(ctx -> {
+            TeamBalancer.open(ctx.getSource().getPlayerOrException());
+            return 1;
+        }));
     }
 
     private static int setMode(CommandContext<CommandSourceStack> ctx, GameMode mode) {
