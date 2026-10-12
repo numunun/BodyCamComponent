@@ -14,6 +14,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import numunun.bodycamcomponent.BodyCamComponent;
+import numunun.bodycamcomponent.network.AbilityClientData;
 
 import java.util.Random;
 
@@ -29,6 +30,11 @@ public final class DeathEffect {
     private static boolean noiseReady = false;
     private static long startMs = -1;
     private static boolean wasDead = false;
+    private static final long CONN_NOISE_MS = 250;
+    private static final long CONN_BLACK_MS = 700;
+    private static final long CONN_FADE_MS = 600;
+    private static long connectStart = -1;
+    private static boolean wasSpectator = false;
 
     private static void trigger() {
         if (startMs >= 0 && System.currentTimeMillis() - startMs < 2000) return;  // 중복 방지
@@ -40,6 +46,11 @@ public final class DeathEffect {
         if (e.phase != TickEvent.Phase.END) return;
         LocalPlayer p = Minecraft.getInstance().player;
         if (p == null) return;
+        boolean spectator = p.isSpectator();
+        if (wasSpectator && !spectator && !AbilityClientData.role.isEmpty()) {
+            connectStart = System.currentTimeMillis();
+        }
+        wasSpectator = spectator;
         if (p.isDeadOrDying()) {
             if (!wasDead) trigger();
             wasDead = true;
@@ -78,7 +89,10 @@ public final class DeathEffect {
     }
 
     private static void draw(GuiGraphics g, int w, int h) {
-        if (startMs < 0) return;
+        if (startMs < 0) {
+            drawConnected(g, w, h);
+            return;
+        }
         long t = System.currentTimeMillis() - startMs;
         if (t > NOISE_MS + BLACK_MS + FADE_MS) {
             startMs = -1;
@@ -102,5 +116,33 @@ public final class DeathEffect {
             String text = "SIGNAL LOST";
             g.drawString(font, text, w / 2 - font.width(text) / 2, h / 2 - 4, 0xFFBBBBBB, false);
         }
+    }
+
+    // 리스폰: 새 바디캠이 켜지는 연출 (노이즈 → 암전 + CAM CONNECTED → 밝아짐)
+    private static void drawConnected(GuiGraphics g, int w, int h) {
+        if (connectStart < 0) return;
+        long t = System.currentTimeMillis() - connectStart;
+        if (t > CONN_NOISE_MS + CONN_BLACK_MS + CONN_FADE_MS) {
+            connectStart = -1;
+            return;
+        }
+        if (t < CONN_NOISE_MS) {
+            ensureNoise();
+            int vh = Math.max(1, 128 * h / Math.max(1, w));
+            g.blit(NOISE_ID, 0, 0, w, h, RANDOM.nextInt(128), RANDOM.nextInt(128), 128, vh, 256, 256);
+            return;
+        }
+
+        float alpha = t < CONN_NOISE_MS + CONN_BLACK_MS ? 1f
+                : 1f - (t - CONN_NOISE_MS - CONN_BLACK_MS) / (float) CONN_FADE_MS;
+        int a = (int) (alpha * 255);
+        g.fill(0, 0, w, h, a << 24);
+
+        Font font = Minecraft.getInstance().font;
+        String text = "CAM CONNECTED";
+        int color = (Math.max(4, a) << 24) | 0x55FF55;
+        int x = w / 2 - font.width(text) / 2;
+        g.fill(x - 10, h / 2 - 2, x - 6, h / 2 + 2, color);  // 초록 점
+        g.drawString(font, text, x, h / 2 - 4, color, false);
     }
 }
